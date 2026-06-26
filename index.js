@@ -233,7 +233,39 @@ async function run() {
     });
 
 
-    
+    // wishlist get
+    app.get("/api/wishlist", async (req, res) => {
+      const session = await auth.api.getSession({ headers: req.headers });
+      if (!session) return res.status(401).send({ message: "Unauthorized" });
+      const items = await wishlistCollection.find({ userId: session.user.id }).toArray();
+      res.send(items);
+    });
+
+    // wishlist add
+    app.post("/api/wishlist", async (req, res) => {
+      const session = await auth.api.getSession({ headers: req.headers });
+      if (!session) return res.status(401).send({ message: "Unauthorized" });
+
+      const { productId } = req.body;
+      const exists = await wishlistCollection.findOne({ userId: session.user.id, productId });
+      if (exists) return res.send({ message: "Already in wishlist" });
+
+      const result = await wishlistCollection.insertOne({
+        userId: session.user.id,
+        productId,
+        createdAt: new Date(),
+      });
+      res.send(result);
+    });
+
+    // wishlist remove
+    app.delete("/api/wishlist/:productId", async (req, res) => {
+      const session = await auth.api.getSession({ headers: req.headers });
+      if (!session) return res.status(401).send({ message: "Unauthorized" });
+      const { productId } = req.params;
+      const result = await wishlistCollection.deleteOne({ userId: session.user.id, productId });
+      res.send(result);
+    });
 
 
     //payment
