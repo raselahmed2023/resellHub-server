@@ -219,41 +219,21 @@ async function run() {
 
     //overview buyer
 
-
-
-    // wishlist get
-    app.get("/api/wishlist", async (req, res) => {
-      const session = await auth.api.getSession({ headers: req.headers });
-      if (!session) return res.status(401).send({ message: "Unauthorized" });
-      const items = await wishlistCollection.find({ userId: session.user.id }).toArray();
-      res.send(items);
-    });
-
-    // wishlist add
-    app.post("/api/wishlist", async (req, res) => {
+    app.get("/api/buyer/overview", async (req, res) => {
       const session = await auth.api.getSession({ headers: req.headers });
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
-      const { productId } = req.body;
-      const exists = await wishlistCollection.findOne({ userId: session.user.id, productId });
-      if (exists) return res.send({ message: "Already in wishlist" });
+      const totalOrders = await ordersCollection.countDocuments({ "buyerInfo.userId": session.user.id });
+      const completedOrders = await ordersCollection.countDocuments({ "buyerInfo.userId": session.user.id, orderStatus: "delivered" });
+      const pendingOrders = await ordersCollection.countDocuments({ "buyerInfo.userId": session.user.id, orderStatus: "pending" });
+      const wishlistCount = await wishlistCollection.countDocuments({ userId: session.user.id });
+      const recentPurchases = await ordersCollection.find({ "buyerInfo.userId": session.user.id }).sort({ createdAt: -1 }).limit(5).toArray();
 
-      const result = await wishlistCollection.insertOne({
-        userId: session.user.id,
-        productId,
-        createdAt: new Date(),
-      });
-      res.send(result);
+      res.send({ totalOrders, completedOrders, pendingOrders, wishlistCount, recentPurchases });
     });
 
-    // wishlist remove
-    app.delete("/api/wishlist/:productId", async (req, res) => {
-      const session = await auth.api.getSession({ headers: req.headers });
-      if (!session) return res.status(401).send({ message: "Unauthorized" });
-      const { productId } = req.params;
-      const result = await wishlistCollection.deleteOne({ userId: session.user.id, productId });
-      res.send(result);
-    });
+
+    
 
 
     //payment
