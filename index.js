@@ -291,69 +291,7 @@ async function run() {
 
     //order route
 
-    app.post("/api/orders", async (req, res) => {
-      const session = await auth.api.getSession({ headers: req.headers });
-      if (!session) return res.status(401).send({ message: "Unauthorized" });
-
-      const { productId, transactionId, amount, deliveryInfo } = req.body;
-
-      const product = await productsCollection.findOne({ _id: new ObjectId(productId) });
-      if (!product) return res.status(404).send({ message: "Product not found" });
-
-      const order = {
-        buyerInfo: {
-          userId: session.user.id,
-          name: session.user.name,
-          email: session.user.email,
-        },
-        sellerInfo: product.sellerInfo,
-        productId,
-        productTitle: product.title,
-        productImage: product.images?.[0] || "",
-        amount,
-        deliveryInfo,
-        transactionId,
-        paymentStatus: "paid",
-        orderStatus: "pending",
-        createdAt: new Date(),
-      };
-
-      const result = await ordersCollection.insertOne(order);
-
-      await productsCollection.updateOne(
-        { _id: new ObjectId(productId) },
-        { $inc: { stock: -1 } }
-      );
-
-      res.send(result);
-    });
-
-
-    //order
-    app.get("/api/orders/my-orders", async (req, res) => {
-      const session = await auth.api.getSession({ headers: req.headers });
-      if (!session) return res.status(401).send({ message: "Unauthorized" });
-
-      const result = await ordersCollection
-        .find({ "buyerInfo.userId": session.user.id })
-        .sort({ createdAt: -1 })
-        .toArray();
-
-      res.send(result);
-    });
-
-    // order cancel
-    app.patch("/api/orders/:id/cancel", async (req, res) => {
-      const session = await auth.api.getSession({ headers: req.headers });
-      if (!session) return res.status(401).send({ message: "Unauthorized" });
-
-      const { id } = req.params;
-      const result = await ordersCollection.updateOne(
-        { _id: new ObjectId(id), "buyerInfo.userId": session.user.id, orderStatus: "pending" },
-        { $set: { orderStatus: "cancelled" } }
-      );
-      res.send(result);
-    });
+    
 
 
     //payment history page
