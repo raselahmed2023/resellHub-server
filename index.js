@@ -1,7 +1,7 @@
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const dotenv = require('dotenv');
-dotenv.config(); 
+dotenv.config();
 const cors = require('cors');
 const { betterAuth } = require("better-auth");
 const { mongodbAdapter } = require("better-auth/adapters/mongodb");
@@ -27,6 +27,22 @@ const auth = betterAuth({
   database: mongodbAdapter(client.db("resellHub"), { client }),
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: [process.env.CLIENT_URL],
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        defaultValue: "buyer",
+      },
+      location: {
+        type: "string",
+        required: false,
+      },
+      phone: {
+        type: "string",
+        required: false,
+      },
+    },
+  },
 });
 
 app.all("/api/auth/*splat", async (req, res) => {
