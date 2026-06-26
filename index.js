@@ -370,7 +370,29 @@ async function run() {
       res.send(result);
     });
 
-    
+    // seller orders
+    app.get("/api/seller/orders", async (req, res) => {
+      const session = await auth.api.getSession({ headers: req.headers });
+      if (!session) return res.status(401).send({ message: "Unauthorized" });
+      const result = await ordersCollection
+        .find({ "sellerInfo.userId": session.user.id })
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(result);
+    });
+
+    // order status update
+    app.patch("/api/orders/:id/status", async (req, res) => {
+      const session = await auth.api.getSession({ headers: req.headers });
+      if (!session) return res.status(401).send({ message: "Unauthorized" });
+      const { id } = req.params;
+      const { orderStatus } = req.body;
+      const result = await ordersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { orderStatus } }
+      );
+      res.send(result);
+    });
 
     // admin middleware
     const verifyAdmin = async (req, res, next) => {
@@ -381,29 +403,7 @@ async function run() {
       next();
     };
 
-    // admin overview
-    app.get("/api/admin/overview", verifyAdmin, async (req, res) => {
-      const totalUsers = await usersCollection.countDocuments();
-      const totalProducts = await productsCollection.countDocuments();
-      const totalOrders = await ordersCollection.countDocuments();
-      const totalRevenue = await ordersCollection.aggregate([
-        { $match: { paymentStatus: "paid" } },
-        { $group: { _id: null, total: { $sum: "$amount" } } }
-      ]).toArray();
-
-      res.send({
-        totalUsers,
-        totalProducts,
-        totalOrders,
-        totalRevenue: totalRevenue[0]?.total || 0,
-      });
-    });
-
-    // admin - all users
-    app.get("/api/admin/users", verifyAdmin, async (req, res) => {
-      const result = await usersCollection.find().sort({ createdAt: -1 }).toArray();
-      res.send(result);
-    });
+    
 
     // admin - update user role/status
     app.patch("/api/admin/users/:id", verifyAdmin, async (req, res) => {
