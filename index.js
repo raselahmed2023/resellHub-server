@@ -99,22 +99,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/api/categories/stats", async (req, res) => {
-      const categories = await productsCollection.aggregate([
-        { $match: { status: "available" } },
-        { $group: { _id: "$category", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]).toArray();
-      res.send(categories);
-    });
 
-    app.get("/api/stats", async (req, res) => {
-      const totalProducts = await productsCollection.countDocuments({ status: "available" });
-      const totalSellers = await usersCollection.countDocuments({ role: "seller" });
-      const totalBuyers = await usersCollection.countDocuments({ role: "buyer" });
-      const completedOrders = 0;
-      res.send({ totalProducts, totalSellers, totalBuyers, completedOrders });
-    });
 
     app.get("/api/products", async (req, res) => {
       const { search, category, condition, sort, page = 1, limit = 12 } = req.query;
