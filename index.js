@@ -403,25 +403,31 @@ async function run() {
       next();
     };
 
-    
+    // admin overview
+    app.get("/api/admin/overview", verifyAdmin, async (req, res) => {
+      const totalUsers = await usersCollection.countDocuments();
+      const totalProducts = await productsCollection.countDocuments();
+      const totalOrders = await ordersCollection.countDocuments();
+      const totalRevenue = await ordersCollection.aggregate([
+        { $match: { paymentStatus: "paid" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]).toArray();
 
-    // admin - update user role/status
-    app.patch("/api/admin/users/:id", verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const { role, status } = req.body;
-      const updateDoc = { $set: {} };
-      if (role) updateDoc.$set.role = role;
-      if (status) updateDoc.$set.status = status;
-      const result = await usersCollection.updateOne({ _id: new ObjectId(id) }, updateDoc);
+      res.send({
+        totalUsers,
+        totalProducts,
+        totalOrders,
+        totalRevenue: totalRevenue[0]?.total || 0,
+      });
+    });
+
+    // admin - all users
+    app.get("/api/admin/users", verifyAdmin, async (req, res) => {
+      const result = await usersCollection.find().sort({ createdAt: -1 }).toArray();
       res.send(result);
     });
 
-    // admin - delete user
-    app.delete("/api/admin/users/:id", verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
-      res.send(result);
-    });
+   
 
     // admin - all products
     app.get("/api/admin/products", verifyAdmin, async (req, res) => {
