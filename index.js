@@ -358,31 +358,19 @@ async function run() {
 
     //payment history page
 
-    
-
-    // seller orders
-    app.get("/api/seller/orders", async (req, res) => {
+    app.get("/api/orders/payments", async (req, res) => {
       const session = await auth.api.getSession({ headers: req.headers });
       if (!session) return res.status(401).send({ message: "Unauthorized" });
+
       const result = await ordersCollection
-        .find({ "sellerInfo.userId": session.user.id })
+        .find({ "buyerInfo.userId": session.user.id, paymentStatus: "paid" })
         .sort({ createdAt: -1 })
         .toArray();
+
       res.send(result);
     });
 
-    // order status update
-    app.patch("/api/orders/:id/status", async (req, res) => {
-      const session = await auth.api.getSession({ headers: req.headers });
-      if (!session) return res.status(401).send({ message: "Unauthorized" });
-      const { id } = req.params;
-      const { orderStatus } = req.body;
-      const result = await ordersCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { orderStatus } }
-      );
-      res.send(result);
-    });
+    
 
     // admin middleware
     const verifyAdmin = async (req, res, next) => {
