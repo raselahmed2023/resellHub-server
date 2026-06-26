@@ -181,24 +181,44 @@ async function run() {
       res.send(result);
     });
 
-   
+    // DELETE
+
+    app.delete("/api/products/:id", async (req, res) => {
+      const session = await auth.api.getSession({ headers: req.headers });
+      if (!session) return res.status(401).send({ message: "Unauthorized" });
+      const { id } = req.params;
+
+      const product = await productsCollection.findOne({ _id: new ObjectId(id) });
+      if (!product) return res.status(404).send({ message: "Not found" });
+      if (product.sellerInfo.email !== session.user.email) {
+        return res.status(403).send({ message: "Forbidden" });
+      }
+
+      const result = await productsCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
+
+    //seller overview
+
+    app.get("/api/seller/overview", async (req, res) => {
+      const session = await auth.api.getSession({ headers: req.headers });
+      if (!session) return res.status(401).send({ message: "Unauthorized" });
+
+      const totalProducts = await productsCollection.countDocuments({ "sellerInfo.userId": session.user.id });
+      const allOrders = await ordersCollection.find({ "sellerInfo.userId": session.user.id }).toArray();
+      const totalSales = allOrders.filter((o) => o.orderStatus === "delivered").length;
+      const totalRevenue = allOrders.filter((o) => o.orderStatus === "delivered").reduce((sum, o) => sum + o.amount, 0);
+      const pendingOrders = allOrders.filter((o) => o.orderStatus === "pending").length;
+      const recentOrders = allOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
+
+      res.send({ totalProducts, totalSales, totalRevenue, pendingOrders, recentOrders });
+    });
 
 
 
     //overview buyer
 
-    app.get("/api/buyer/overview", async (req, res) => {
-      const session = await auth.api.getSession({ headers: req.headers });
-      if (!session) return res.status(401).send({ message: "Unauthorized" });
-
-      const totalOrders = await ordersCollection.countDocuments({ "buyerInfo.userId": session.user.id });
-      const completedOrders = await ordersCollection.countDocuments({ "buyerInfo.userId": session.user.id, orderStatus: "delivered" });
-      const pendingOrders = await ordersCollection.countDocuments({ "buyerInfo.userId": session.user.id, orderStatus: "pending" });
-      const wishlistCount = await wishlistCollection.countDocuments({ userId: session.user.id });
-      const recentPurchases = await ordersCollection.find({ "buyerInfo.userId": session.user.id }).sort({ createdAt: -1 }).limit(5).toArray();
-
-      res.send({ totalOrders, completedOrders, pendingOrders, wishlistCount, recentPurchases });
-    });
 
 
     // wishlist get
