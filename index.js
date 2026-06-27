@@ -205,8 +205,8 @@ async function run() {
       const session = await auth.api.getSession({ headers: req.headers });
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
-      const totalProducts = await productsCollection.countDocuments({ "sellerInfo.userId": session.user.id });
-      const allOrders = await ordersCollection.find({ "sellerInfo.userId": session.user.id }).toArray();
+      const totalProducts = await productsCollection.countDocuments({ "sellerInfo.userId": session.user.email });
+      const allOrders = await ordersCollection.find({ "sellerInfo.userId": session.user.email }).toArray();
       const totalSales = allOrders.filter((o) => o.orderStatus === "delivered").length;
       const totalRevenue = allOrders.filter((o) => o.orderStatus === "delivered").reduce((sum, o) => sum + o.amount, 0);
       const pendingOrders = allOrders.filter((o) => o.orderStatus === "pending").length;
@@ -300,6 +300,10 @@ async function run() {
       const product = await productsCollection.findOne({ _id: new ObjectId(productId) });
       if (!product) return res.status(404).send({ message: "Product not found" });
 
+      if (product.stock <= 0) {
+        return res.status(400).send({ message: "Product is out of stock" });
+      }
+
       const order = {
         buyerInfo: {
           userId: session.user.id,
@@ -375,7 +379,7 @@ async function run() {
       const session = await auth.api.getSession({ headers: req.headers });
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const result = await ordersCollection
-        .find({ "sellerInfo.userId": session.user.id })
+        .find({ "sellerInfo.userId": session.user.email })
         .sort({ createdAt: -1 })
         .toArray();
       res.send(result);
@@ -427,7 +431,7 @@ async function run() {
       res.send(result);
     });
 
-   
+
 
     // admin - all products
     app.get("/api/admin/products", verifyAdmin, async (req, res) => {
