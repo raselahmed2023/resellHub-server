@@ -205,8 +205,8 @@ async function run() {
       const session = await auth.api.getSession({ headers: req.headers });
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
-      const totalProducts = await productsCollection.countDocuments({ "sellerInfo.userId": session.user.email });
-      const allOrders = await ordersCollection.find({ "sellerInfo.userId": session.user.email }).toArray();
+      const totalProducts = await productsCollection.countDocuments({ "sellerInfo.email": session.user.email });
+      const allOrders = await ordersCollection.find({ "sellerInfo.email": session.user.email }).toArray();
       const totalSales = allOrders.filter((o) => o.orderStatus === "delivered").length;
       const totalRevenue = allOrders.filter((o) => o.orderStatus === "delivered").reduce((sum, o) => sum + o.amount, 0);
       const pendingOrders = allOrders.filter((o) => o.orderStatus === "pending").length;
@@ -379,7 +379,7 @@ async function run() {
       const session = await auth.api.getSession({ headers: req.headers });
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const result = await ordersCollection
-        .find({ "sellerInfo.userId": session.user.email })
+        .find({ "sellerInfo.email": session.user.email })
         .sort({ createdAt: -1 })
         .toArray();
       res.send(result);
@@ -460,6 +460,24 @@ async function run() {
     // admin - all orders
     app.get("/api/admin/orders", verifyAdmin, async (req, res) => {
       const result = await ordersCollection.find().sort({ createdAt: -1 }).toArray();
+      res.send(result);
+    });
+
+    // admin - update user role/status
+    app.patch("/api/admin/users/:id", verifyAdmin, async (req, res) => {
+      const { id } = req.params;
+      const { role, status } = req.body;
+      const updateDoc = { $set: {} };
+      if (role) updateDoc.$set.role = role;
+      if (status) updateDoc.$set.status = status;
+      const result = await usersCollection.updateOne({ _id: new ObjectId(id) }, updateDoc);
+      res.send(result);
+    });
+
+    // admin - delete user
+    app.delete("/api/admin/users/:id", verifyAdmin, async (req, res) => {
+      const { id } = req.params;
+      const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
