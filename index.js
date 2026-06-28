@@ -25,6 +25,7 @@ const client = new MongoClient(uri, {
 
 const auth = betterAuth({
   database: mongodbAdapter(client.db("resellHub"), { client }),
+  baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: [process.env.CLIENT_URL],
   user: {
