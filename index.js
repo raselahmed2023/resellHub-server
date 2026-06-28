@@ -3,8 +3,6 @@ const express = require('express');
 const dotenv = require('dotenv');
 dotenv.config();
 
-console.log('BETTER_AUTH_URL:', process.env.BETTER_AUTH_URL);
-console.log('CLIENT_URL:', process.env.CLIENT_URL);
 const cors = require('cors');
 const { betterAuth } = require("better-auth");
 const { mongodbAdapter } = require("better-auth/adapters/mongodb");
@@ -50,6 +48,10 @@ const auth = betterAuth({
 });
 
 app.all("/api/auth/*splat", async (req, res) => {
+  req.headers["x-forwarded-proto"] = "https";
+  req.headers["x-forwarded-host"] = req.headers.host;
+  console.log('Auth request origin:', req.headers.origin);
+  console.log('Auth request host:', req.headers.host);
   return auth.handler(req, res);
 });
 
