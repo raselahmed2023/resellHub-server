@@ -48,11 +48,21 @@ const auth = betterAuth({
 });
 
 app.all("/api/auth/*splat", async (req, res) => {
-  req.headers["x-forwarded-proto"] = "https";
-  req.headers["x-forwarded-host"] = req.headers.host;
-  console.log('Auth request origin:', req.headers.origin);
-  console.log('Auth request host:', req.headers.host);
-  return auth.handler(req, res);
+  const url = new URL(req.url, process.env.BETTER_AUTH_URL);
+  const webRequest = new Request(url, {
+    method: req.method,
+    headers: req.headers,
+    body: req.method !== "GET" && req.method !== "HEAD"
+      ? JSON.stringify(req.body)
+      : undefined,
+  });
+
+  const response = await auth.handler(webRequest);
+
+  response.headers.forEach((value, key) => {
+    res.setHeader(key, value);
+  });
+  res.status(response.status).send(await response.text());
 });
 
 async function run() {
