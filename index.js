@@ -2,6 +2,9 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const dotenv = require('dotenv');
 dotenv.config();
+
+console.log('BETTER_AUTH_URL:', process.env.BETTER_AUTH_URL);
+console.log('CLIENT_URL:', process.env.CLIENT_URL);
 const cors = require('cors');
 const { betterAuth } = require("better-auth");
 const { mongodbAdapter } = require("better-auth/adapters/mongodb");
