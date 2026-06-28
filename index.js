@@ -30,12 +30,24 @@ const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: [process.env.CLIENT_URL],
 
-  emailAndPassword: { enabled: true }, 
+  emailAndPassword: { enabled: true },
 
-  socialProviders: {                  
+  socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    },
+  },
+
+  advanced: {
+    useSecureCookies: true,
+    defaultCookieAttributes: {
+      secure: true,
+      sameSite: "none",
+      path: "/",
+    },
+    crossSubdomainCookies: {
+      enabled: false,
     },
   },
 
