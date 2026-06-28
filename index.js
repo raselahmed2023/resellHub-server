@@ -29,20 +29,21 @@ const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: [process.env.CLIENT_URL],
+
+  emailAndPassword: { enabled: true }, 
+
+  socialProviders: {                  
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    },
+  },
+
   user: {
     additionalFields: {
-      role: {
-        type: "string",
-        defaultValue: "buyer",
-      },
-      location: {
-        type: "string",
-        required: false,
-      },
-      phone: {
-        type: "string",
-        required: false,
-      },
+      role: { type: "string", defaultValue: "buyer" },
+      location: { type: "string", required: false },
+      phone: { type: "string", required: false },
     },
   },
 });
@@ -95,7 +96,7 @@ async function run() {
       res.send(result);
     });
 
-    // ─ GET static routes FIRST (before /:id) 
+    // 
 
     app.get("/api/products/featured", async (req, res) => {
       const products = await productsCollection
