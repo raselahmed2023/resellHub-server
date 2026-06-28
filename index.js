@@ -8,9 +8,6 @@ const { betterAuth } = require("better-auth");
 const { mongodbAdapter } = require("better-auth/adapters/mongodb");
 const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-const { fromNodeHeaders } = require("better-auth/node");
-
-
 
 const app = express();
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
@@ -61,6 +58,22 @@ const auth = betterAuth({
   },
 });
 
+// ✅ Vercel verify-session দিয়ে token verify করো
+const verifyToken = async (req) => {
+  const token = req.headers.authorization;
+  if (!token) return null;
+
+  try {
+    const response = await fetch(`${process.env.CLIENT_URL}/api/verify-session`, {
+      headers: { "Authorization": token }
+    });
+    if (!response.ok) return null;
+    return response.json();
+  } catch (e) {
+    return null;
+  }
+};
+
 app.all("/api/auth/*splat", async (req, res) => {
   const url = new URL(req.url, process.env.BETTER_AUTH_URL);
   const webRequest = new Request(url, {
@@ -88,20 +101,9 @@ async function run() {
     const wishlistCollection = db.collection("wishlist");
     const ordersCollection = db.collection("orders");
 
-    
-    app.get("/api/test-session", async (req, res) => {
-      const token = req.headers.authorization;
-      console.log('Received token:', token);
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(req.headers)
-      });
-      console.log('Session result:', session);
-      res.json({ token: !!token, session: !!session });
-    }); 
-
-    // POST 
+    // POST
     app.post("/api/products", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const product = {
@@ -120,8 +122,6 @@ async function run() {
       res.send(result);
     });
 
-    // 
-
     app.get("/api/products/featured", async (req, res) => {
       const products = await productsCollection
         .find({ status: "available" })
@@ -132,7 +132,7 @@ async function run() {
     });
 
     app.get("/api/products/my-products", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const result = await productsCollection
         .find({ "sellerInfo.email": session.user.email })
@@ -174,18 +174,14 @@ async function run() {
       res.send({ products, total, page: Number(page), totalPages: Math.ceil(total / Number(limit)) });
     });
 
-    // GET dynamic
-
     app.get("/api/products/:id", async (req, res) => {
       const { id } = req.params;
       const result = await productsCollection.findOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
-    // PATCH 
-
     app.patch("/api/users/profile", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const { name, phone, location, photo } = req.body;
@@ -204,7 +200,7 @@ async function run() {
     });
 
     app.patch("/api/products/:id", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const { id } = req.params;
 
@@ -222,10 +218,8 @@ async function run() {
       res.send(result);
     });
 
-    // DELETE
-
     app.delete("/api/products/:id", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const { id } = req.params;
 
@@ -239,11 +233,8 @@ async function run() {
       res.send(result);
     });
 
-
-    //seller overview
-
     app.get("/api/seller/overview", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const totalProducts = await productsCollection.countDocuments({ "sellerInfo.email": session.user.email });
@@ -256,12 +247,8 @@ async function run() {
       res.send({ totalProducts, totalSales, totalRevenue, pendingOrders, recentOrders });
     });
 
-
-
-    //overview buyer
-
     app.get("/api/buyer/overview", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const totalOrders = await ordersCollection.countDocuments({ "buyerInfo.userId": session.user.id });
@@ -273,18 +260,15 @@ async function run() {
       res.send({ totalOrders, completedOrders, pendingOrders, wishlistCount, recentPurchases });
     });
 
-
-    // wishlist get
     app.get("/api/wishlist", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const items = await wishlistCollection.find({ userId: session.user.id }).toArray();
       res.send(items);
     });
 
-    // wishlist add
     app.post("/api/wishlist", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const { productId } = req.body;
@@ -299,20 +283,16 @@ async function run() {
       res.send(result);
     });
 
-    // wishlist remove
     app.delete("/api/wishlist/:productId", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const { productId } = req.params;
       const result = await wishlistCollection.deleteOne({ userId: session.user.id, productId });
       res.send(result);
     });
 
-
-    //payment
-
     app.post("/api/create-payment-intent", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const { amount, productId } = req.body;
@@ -330,10 +310,8 @@ async function run() {
       res.send({ clientSecret: paymentIntent.client_secret });
     });
 
-    //order route
-
     app.post("/api/orders", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const { productId, transactionId, amount, deliveryInfo } = req.body;
@@ -373,10 +351,8 @@ async function run() {
       res.send(result);
     });
 
-
-    //order
     app.get("/api/orders/my-orders", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const result = await ordersCollection
@@ -387,9 +363,8 @@ async function run() {
       res.send(result);
     });
 
-    // order cancel
     app.patch("/api/orders/:id/cancel", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const { id } = req.params;
@@ -400,11 +375,8 @@ async function run() {
       res.send(result);
     });
 
-
-    //payment history page
-
     app.get("/api/orders/payments", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const result = await ordersCollection
@@ -415,9 +387,8 @@ async function run() {
       res.send(result);
     });
 
-    // seller orders
     app.get("/api/seller/orders", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const result = await ordersCollection
         .find({ "sellerInfo.email": session.user.email })
@@ -426,9 +397,8 @@ async function run() {
       res.send(result);
     });
 
-    // order status update
     app.patch("/api/orders/:id/status", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       const { id } = req.params;
       const { orderStatus } = req.body;
@@ -439,16 +409,14 @@ async function run() {
       res.send(result);
     });
 
-    // admin middleware
     const verifyAdmin = async (req, res, next) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+      const session = await verifyToken(req);
       if (!session) return res.status(401).send({ message: "Unauthorized" });
       if (session.user.role !== "admin") return res.status(403).send({ message: "Forbidden" });
       req.user = session.user;
       next();
     };
 
-    // admin overview
     app.get("/api/admin/overview", verifyAdmin, async (req, res) => {
       const totalUsers = await usersCollection.countDocuments();
       const totalProducts = await productsCollection.countDocuments();
@@ -466,21 +434,16 @@ async function run() {
       });
     });
 
-    // admin - all users
     app.get("/api/admin/users", verifyAdmin, async (req, res) => {
       const result = await usersCollection.find().sort({ createdAt: -1 }).toArray();
       res.send(result);
     });
 
-
-
-    // admin - all products
     app.get("/api/admin/products", verifyAdmin, async (req, res) => {
       const result = await productsCollection.find().sort({ createdAt: -1 }).toArray();
       res.send(result);
     });
 
-    // admin - approve/reject product
     app.patch("/api/admin/products/:id", verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
@@ -491,20 +454,17 @@ async function run() {
       res.send(result);
     });
 
-    // admin - delete product
     app.delete("/api/admin/products/:id", verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const result = await productsCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
-    // admin - all orders
     app.get("/api/admin/orders", verifyAdmin, async (req, res) => {
       const result = await ordersCollection.find().sort({ createdAt: -1 }).toArray();
       res.send(result);
     });
 
-    // admin - update user role/status
     app.patch("/api/admin/users/:id", verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { role, status } = req.body;
@@ -515,7 +475,6 @@ async function run() {
       res.send(result);
     });
 
-    // admin - delete user
     app.delete("/api/admin/users/:id", verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
