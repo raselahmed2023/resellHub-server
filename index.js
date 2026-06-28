@@ -87,6 +87,8 @@ async function run() {
     const usersCollection = db.collection("user");
     const wishlistCollection = db.collection("wishlist");
     const ordersCollection = db.collection("orders");
+
+    
     app.get("/api/test-session", async (req, res) => {
       const token = req.headers.authorization;
       console.log('Received token:', token);
@@ -95,7 +97,7 @@ async function run() {
       });
       console.log('Session result:', session);
       res.json({ token: !!token, session: !!session });
-    });
+    }); 
 
     // POST 
     app.post("/api/products", async (req, res) => {
