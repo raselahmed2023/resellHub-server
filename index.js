@@ -87,6 +87,15 @@ async function run() {
     const usersCollection = db.collection("user");
     const wishlistCollection = db.collection("wishlist");
     const ordersCollection = db.collection("orders");
+    app.get("/api/test-session", async (req, res) => {
+      const token = req.headers.authorization;
+      console.log('Received token:', token);
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(req.headers)
+      });
+      console.log('Session result:', session);
+      res.json({ token: !!token, session: !!session });
+    });
 
     // POST 
     app.post("/api/products", async (req, res) => {
@@ -232,7 +241,7 @@ async function run() {
     //seller overview
 
     app.get("/api/seller/overview", async (req, res) => {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers)});
+      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
       if (!session) return res.status(401).send({ message: "Unauthorized" });
 
       const totalProducts = await productsCollection.countDocuments({ "sellerInfo.email": session.user.email });
