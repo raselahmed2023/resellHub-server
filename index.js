@@ -102,13 +102,14 @@ async function run() {
   try {
     console.log("Run function started...");
     await client.connect();
-    console.log("MongoDB Connected");
+    console.log("Mongo Connected");
+    console.log("Registering Routes...");
     const db = client.db("resellHub");
     const productsCollection = db.collection("products");
     const usersCollection = db.collection("user");
     const wishlistCollection = db.collection("wishlist");
     const ordersCollection = db.collection("orders");
-
+    console.log("Products route registered");
 
     // POST
     app.post("/api/products", async (req, res) => {
@@ -130,7 +131,7 @@ async function run() {
 
 
       const result = await productsCollection.insertOne(product);
-      res.send(result);
+      res.send("Products Route Works");
     });
 
 
