@@ -105,16 +105,14 @@ const auth = betterAuth({
 
 const getSession = async (req) => {
   try {
-   
     const token = req.headers["authorization"]?.split(" ")[1];
-    if (token) {
-      const session = await auth.api.getSession({
-        headers: new Headers({ authorization: `Bearer ${token}` }),
-      });
-      return session;
-    }
-    
-    const session = await auth.api.getSession({ headers: req.headers });
+    const session = await auth.api.getSession({
+      headers: new Headers(
+        token
+          ? { authorization: `Bearer ${token}` }
+          : req.headers
+      ),
+    });
     return session;
   } catch (error) {
     return null;
