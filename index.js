@@ -12,6 +12,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 
 const app = express();
+
+app.set("trust proxy", 1);
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 
 
@@ -45,13 +47,13 @@ const auth = betterAuth({
 
 
   advanced: {
-    useSecureCookies: process.env.NODE_ENV === "production",
-    defaultCookieAttributes: {
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      path: "/",
-    },
+  useSecureCookies: true,
+  defaultCookieAttributes: {
+    secure: true,
+    sameSite: "none",
+    path: "/",
   },
+},
 
 
   user: {
