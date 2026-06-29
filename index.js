@@ -519,12 +519,6 @@ async function run() {
       res.send(result);
     });
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-export default app;
-=======
->>>>>>> 6c71159
 
     app.delete("/api/admin/products/:id", verifyAdmin, async (req, res) => {
       const { id } = req.params;
@@ -565,7 +559,4 @@ run().catch(console.dir);
 const port = process.env.PORT;
 app.get('/', (req, res) => res.send('Hello World!'));
 app.listen(port, () => console.log(`Server running on port ${port}`));
-<<<<<<< HEAD
-=======
->>>>>>> 2cb054c (add)
->>>>>>> 6c71159
+
