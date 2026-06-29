@@ -134,9 +134,19 @@ const getSession = async (req) => {
 
 // ==================== AUTH ROUTES ====================
 
-app.all("/api/auth/*splat", async (req, res) => {
+app.all("/api/auth/*", async (req, res) => {
   try {
+    console.log("🔍 Auth request:", {
+      method: req.method,
+      url: req.url,
+      path: req.path,
+      baseURL: process.env.BETTER_AUTH_URL,
+      body: req.body,
+    });
+
     const url = new URL(req.url, process.env.BETTER_AUTH_URL);
+    console.log("✓ URL constructed:", url.toString());
+
     const webRequest = new Request(url, {
       method: req.method,
       headers: new Headers(req.headers),
@@ -144,14 +154,31 @@ app.all("/api/auth/*splat", async (req, res) => {
         ? JSON.stringify(req.body)
         : undefined,
     });
+
+    console.log("✓ WebRequest created");
+
     const response = await auth.handler(webRequest);
+    
+    console.log("✓ Auth response:", {
+      status: response.status,
+      headers: Object.fromEntries(response.headers),
+    });
+
     response.headers.forEach((value, key) => {
       res.setHeader(key, value);
     });
     res.status(response.status).send(await response.text());
   } catch (error) {
-    console.error("Auth handler error:", error);
-    res.status(500).send({ message: "Auth error" });
+    console.error("❌ Auth handler error:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
+    res.status(500).json({ 
+      message: "Auth error",
+      error: error.message,
+      details: error.stack 
+    });
   }
 });
 
