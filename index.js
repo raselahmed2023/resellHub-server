@@ -13,7 +13,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
-app.use(express.json());
+
 
 
 const uri = process.env.MONGODB_URI;
@@ -64,6 +64,7 @@ const auth = betterAuth({
 });
 
 
+
 //
 const getSession = async (req) => {
   const session = await auth.api.getSession({ headers: req.headers });
@@ -90,6 +91,8 @@ app.all("/api/auth/*splat", async (req, res) => {
   });
   res.status(response.status).send(await response.text());
 });
+
+app.use(express.json());
 
 
 async function run() {
