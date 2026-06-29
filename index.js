@@ -13,7 +13,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const app = express();
 
 const allowedOrigins = [
-  process.env.CLIENT_URL,
+  process.env.CLIENT_URL || 'https://resell-hub-rho.vercel.app',
   'http://localhost:3000',
 ].filter(Boolean);
 
@@ -26,6 +26,22 @@ app.use(cors({
     }
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+
+app.options('*', cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
 app.use(cookieParser());
@@ -244,7 +260,7 @@ app.get("/api/products", async (req, res) => {
 
     const sortOption = sort === "price_asc" ? { price: 1 }
       : sort === "price_desc" ? { price: -1 }
-      : { createdAt: -1 };
+        : { createdAt: -1 };
 
     const skip = (Number(page) - 1) * Number(limit);
     const total = await db.collection("products").countDocuments(query);
