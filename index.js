@@ -81,23 +81,23 @@ async function connectDB() {
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-// ✅ FIXED: Pass database getter function directly to mongodbAdapter
+// ✅ CORRECT FORMAT for better-auth mongodbAdapter
 const auth = betterAuth({
-  database: mongodbAdapter(
-    // This should be a function that returns the database instance
-    async () => {
+  database: mongodbAdapter({
+    async db() {
       try {
-        const db = await connectDB();
-        if (!db) {
+        const database = await connectDB();
+        if (!database) {
           throw new Error("Database instance is null");
         }
-        return db;
+        // Return the Db instance directly, not wrapped
+        return database;
       } catch (error) {
         console.error("❌ Database adapter error:", error);
         throw error;
       }
     }
-  ),
+  }),
   baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:5000',
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: allowedOrigins,
