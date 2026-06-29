@@ -30,7 +30,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-
 app.options('*', cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -43,6 +42,7 @@ app.options('*', cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -81,16 +81,24 @@ async function connectDB() {
 
 const isProduction = process.env.NODE_ENV === 'production';
 
+// ✅ FIXED: Proper MongoDB adapter initialization
 const auth = betterAuth({
-  database: mongodbAdapter(
-    {
-      async db() {
+  database: mongodbAdapter({
+    // ✅ Return properly formatted database object
+    async db() {
+      try {
         const { db } = await connectDB();
+        if (!db) {
+          throw new Error("Database connection failed");
+        }
+        // ✅ Return the database instance directly
         return db;
+      } catch (error) {
+        console.error("Database adapter error:", error);
+        throw error;
       }
-    },
-    {}
-  ),
+    }
+  }),
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: allowedOrigins,
@@ -121,7 +129,6 @@ const auth = betterAuth({
 
 const getSession = async (req) => {
   try {
-
     const session = await auth.api.getSession({
       headers: req.headers,
     });
@@ -136,49 +143,25 @@ const getSession = async (req) => {
 
 app.all("/api/auth/*", async (req, res) => {
   try {
-    console.log("🔍 Auth request:", {
-      method: req.method,
-      url: req.url,
-      path: req.path,
-      baseURL: process.env.BETTER_AUTH_URL,
-      body: req.body,
-    });
-
+    console.log("🔍 Auth request:", req.method, req.url);
+    
     const url = new URL(req.url, process.env.BETTER_AUTH_URL);
-    console.log("✓ URL constructed:", url.toString());
-
     const webRequest = new Request(url, {
       method: req.method,
       headers: new Headers(req.headers),
       body: req.method !== "GET" && req.method !== "HEAD"
-        ? JSON.stringify(req.body)
+        ? JSON.stringify(req.body || {})
         : undefined,
     });
-
-    console.log("✓ WebRequest created");
-
-    const response = await auth.handler(webRequest);
     
-    console.log("✓ Auth response:", {
-      status: response.status,
-      headers: Object.fromEntries(response.headers),
-    });
-
+    const response = await auth.handler(webRequest);
     response.headers.forEach((value, key) => {
       res.setHeader(key, value);
     });
     res.status(response.status).send(await response.text());
   } catch (error) {
-    console.error("❌ Auth handler error:", {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    });
-    res.status(500).json({ 
-      message: "Auth error",
-      error: error.message,
-      details: error.stack 
-    });
+    console.error("❌ Auth handler error:", error.message);
+    res.status(500).json({ message: "Auth error", error: error.message });
   }
 });
 
