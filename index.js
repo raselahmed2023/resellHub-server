@@ -100,7 +100,9 @@ app.all("/api/auth/*splat", async (req, res) => {
 
 async function run() {
   try {
+    console.log("Run function started...");
     await client.connect();
+    console.log("MongoDB Connected");
     const db = client.db("resellHub");
     const productsCollection = db.collection("products");
     const usersCollection = db.collection("user");
@@ -559,7 +561,12 @@ async function run() {
 
   } finally { }
 }
-run().catch(console.dir);
+run().catch((err) => {
+  console.error("Run Error:", err);
+});
+app.get("/api/test", (req, res) => {
+  res.send("API Test Working");
+});
 
 
 // const port = process.env.PORT;
