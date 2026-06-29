@@ -1,14 +1,14 @@
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const express = require('express');
-const dotenv = require('dotenv');
+import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
+import express from 'express';
+import dotenv from 'dotenv';
 dotenv.config();
 
+import cors from 'cors';
+import { betterAuth } from "better-auth";
+import { mongodbAdapter } from "better-auth/adapters/mongodb";
+import Stripe from "stripe";
 
-const cors = require('cors');
-const { betterAuth } = require("better-auth");
-const { mongodbAdapter } = require("better-auth/adapters/mongodb");
-const Stripe = require("stripe");
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 
 const app = express();
