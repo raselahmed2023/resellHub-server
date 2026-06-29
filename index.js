@@ -53,7 +53,7 @@ let cachedDb = null;
 
 async function connectDB() {
   if (cachedClient && cachedDb) {
-    return { client: cachedClient, db: cachedDb };
+    return cachedDb;
   }
   try {
     const client = new MongoClient(uri, {
@@ -72,7 +72,7 @@ async function connectDB() {
     console.log("✅ MongoDB Connected");
     cachedClient = client;
     cachedDb = client.db("resellHub");
-    return { client: cachedClient, db: cachedDb };
+    return cachedDb;
   } catch (error) {
     console.error("❌ MongoDB Connection Error:", error);
     throw error;
@@ -81,25 +81,24 @@ async function connectDB() {
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-// ✅ FIXED: Proper MongoDB adapter initialization
+// ✅ CORRECT FORMAT for better-auth mongodbAdapter
 const auth = betterAuth({
   database: mongodbAdapter({
-    // ✅ Return properly formatted database object
     async db() {
       try {
-        const { db } = await connectDB();
-        if (!db) {
-          throw new Error("Database connection failed");
+        const database = await connectDB();
+        if (!database) {
+          throw new Error("Database instance is null");
         }
-        // ✅ Return the database instance directly
-        return db;
+        // Return the Db instance directly, not wrapped
+        return database;
       } catch (error) {
-        console.error("Database adapter error:", error);
+        console.error("❌ Database adapter error:", error);
         throw error;
       }
     }
   }),
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:5000',
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: allowedOrigins,
   emailAndPassword: { enabled: true },
@@ -143,9 +142,7 @@ const getSession = async (req) => {
 
 app.all("/api/auth/*", async (req, res) => {
   try {
-    console.log("🔍 Auth request:", req.method, req.url);
-    
-    const url = new URL(req.url, process.env.BETTER_AUTH_URL);
+    const url = new URL(req.url, process.env.BETTER_AUTH_URL || 'http://localhost:5000');
     const webRequest = new Request(url, {
       method: req.method,
       headers: new Headers(req.headers),
@@ -153,14 +150,13 @@ app.all("/api/auth/*", async (req, res) => {
         ? JSON.stringify(req.body || {})
         : undefined,
     });
-    
     const response = await auth.handler(webRequest);
     response.headers.forEach((value, key) => {
       res.setHeader(key, value);
     });
     res.status(response.status).send(await response.text());
   } catch (error) {
-    console.error("❌ Auth handler error:", error.message);
+    console.error("Auth handler error:", error);
     res.status(500).json({ message: "Auth error", error: error.message });
   }
 });
@@ -178,7 +174,7 @@ app.post("/api/products", async (req, res) => {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
 
-    const { db } = await connectDB();
+    const db = await connectDB();
     const product = {
       ...req.body,
       status: "pending",
@@ -200,7 +196,7 @@ app.post("/api/products", async (req, res) => {
 
 app.get("/api/products/featured", async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const products = await db.collection("products")
       .find({ status: "available" })
       .sort({ createdAt: -1 })
@@ -217,7 +213,7 @@ app.get("/api/products/my-products", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("products")
       .find({ "sellerInfo.email": session.user.email })
       .toArray();
@@ -230,7 +226,7 @@ app.get("/api/products/my-products", async (req, res) => {
 
 app.get("/api/categories/stats", async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const categories = await db.collection("products").aggregate([
       { $match: { status: "available" } },
       { $group: { _id: "$category", count: { $sum: 1 } } },
@@ -245,7 +241,7 @@ app.get("/api/categories/stats", async (req, res) => {
 
 app.get("/api/stats", async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const [totalProducts, totalSellers, totalBuyers, completedOrders] = await Promise.all([
       db.collection("products").countDocuments({ status: "available" }),
       db.collection("user").countDocuments({ role: "seller" }),
@@ -261,7 +257,7 @@ app.get("/api/stats", async (req, res) => {
 
 app.get("/api/products", async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const { search, category, condition, sort, page = 1, limit = 12 } = req.query;
     const query = { status: "available" };
     if (search) query.title = { $regex: search, $options: "i" };
@@ -290,7 +286,7 @@ app.get("/api/products", async (req, res) => {
 
 app.get("/api/products/:id", async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("products").findOne({ _id: new ObjectId(req.params.id) });
     if (!result) return res.status(404).send({ message: "Not found" });
     res.send(result);
@@ -304,7 +300,7 @@ app.patch("/api/products/:id", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const product = await db.collection("products").findOne({ _id: new ObjectId(req.params.id) });
     if (!product) return res.status(404).send({ message: "Not found" });
     if (product.sellerInfo.email !== session.user.email) return res.status(403).send({ message: "Forbidden" });
@@ -325,7 +321,7 @@ app.delete("/api/products/:id", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const product = await db.collection("products").findOne({ _id: new ObjectId(req.params.id) });
     if (!product) return res.status(404).send({ message: "Not found" });
     if (product.sellerInfo.email !== session.user.email) return res.status(403).send({ message: "Forbidden" });
@@ -343,7 +339,7 @@ app.patch("/api/users/profile", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const { name, phone, location, photo } = req.body;
     const updateDoc = { $set: {} };
     if (name) updateDoc.$set.name = name;
@@ -364,7 +360,7 @@ app.get("/api/seller/overview", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const email = session.user.email;
     const [totalProducts, allOrders] = await Promise.all([
       db.collection("products").countDocuments({ "sellerInfo.email": email }),
@@ -385,7 +381,7 @@ app.get("/api/seller/orders", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("orders")
       .find({ "sellerInfo.email": session.user.email })
       .sort({ createdAt: -1 })
@@ -401,7 +397,7 @@ app.patch("/api/orders/:id/status", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("orders").updateOne(
       { _id: new ObjectId(req.params.id) },
       { $set: { orderStatus: req.body.orderStatus } }
@@ -419,7 +415,7 @@ app.get("/api/buyer/overview", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const userId = session.user.id;
     const [totalOrders, completedOrders, pendingOrders, wishlistCount, recentPurchases] = await Promise.all([
       db.collection("orders").countDocuments({ "buyerInfo.userId": userId }),
@@ -441,7 +437,7 @@ app.get("/api/wishlist", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const items = await db.collection("wishlist").find({ userId: session.user.id }).toArray();
     res.send(items);
   } catch (error) {
@@ -454,7 +450,7 @@ app.post("/api/wishlist", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const { productId } = req.body;
     const exists = await db.collection("wishlist").findOne({ userId: session.user.id, productId });
     if (exists) return res.send({ message: "Already in wishlist" });
@@ -474,7 +470,7 @@ app.delete("/api/wishlist/:productId", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("wishlist").deleteOne({ userId: session.user.id, productId: req.params.productId });
     res.send(result);
   } catch (error) {
@@ -506,7 +502,7 @@ app.post("/api/orders", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const { productId, transactionId, amount, deliveryInfo } = req.body;
     const product = await db.collection("products").findOne({ _id: new ObjectId(productId) });
     if (!product) return res.status(404).send({ message: "Product not found" });
@@ -538,7 +534,7 @@ app.get("/api/orders/my-orders", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("orders")
       .find({ "buyerInfo.userId": session.user.id })
       .sort({ createdAt: -1 })
@@ -554,7 +550,7 @@ app.patch("/api/orders/:id/cancel", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("orders").updateOne(
       { _id: new ObjectId(req.params.id), "buyerInfo.userId": session.user.id, orderStatus: "pending" },
       { $set: { orderStatus: "cancelled" } }
@@ -570,7 +566,7 @@ app.get("/api/orders/payments", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("orders")
       .find({ "buyerInfo.userId": session.user.id, paymentStatus: "paid" })
       .sort({ createdAt: -1 })
@@ -598,7 +594,7 @@ const verifyAdmin = async (req, res, next) => {
 
 app.get("/api/admin/overview", verifyAdmin, async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const [totalUsers, totalProducts, totalOrders, totalRevenue] = await Promise.all([
       db.collection("user").countDocuments(),
       db.collection("products").countDocuments(),
@@ -617,7 +613,7 @@ app.get("/api/admin/overview", verifyAdmin, async (req, res) => {
 
 app.get("/api/admin/users", verifyAdmin, async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("user").find().sort({ createdAt: -1 }).toArray();
     res.send(result);
   } catch (error) {
@@ -628,7 +624,7 @@ app.get("/api/admin/users", verifyAdmin, async (req, res) => {
 
 app.get("/api/admin/products", verifyAdmin, async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("products").find().sort({ createdAt: -1 }).toArray();
     res.send(result);
   } catch (error) {
@@ -639,7 +635,7 @@ app.get("/api/admin/products", verifyAdmin, async (req, res) => {
 
 app.patch("/api/admin/products/:id", verifyAdmin, async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("products").updateOne(
       { _id: new ObjectId(req.params.id) },
       { $set: { status: req.body.status } }
@@ -653,7 +649,7 @@ app.patch("/api/admin/products/:id", verifyAdmin, async (req, res) => {
 
 app.delete("/api/admin/products/:id", verifyAdmin, async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("products").deleteOne({ _id: new ObjectId(req.params.id) });
     res.send(result);
   } catch (error) {
@@ -664,7 +660,7 @@ app.delete("/api/admin/products/:id", verifyAdmin, async (req, res) => {
 
 app.get("/api/admin/orders", verifyAdmin, async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("orders").find().sort({ createdAt: -1 }).toArray();
     res.send(result);
   } catch (error) {
@@ -675,7 +671,7 @@ app.get("/api/admin/orders", verifyAdmin, async (req, res) => {
 
 app.patch("/api/admin/users/:id", verifyAdmin, async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const { role, status } = req.body;
     const updateDoc = { $set: {} };
     if (role) updateDoc.$set.role = role;
@@ -690,7 +686,7 @@ app.patch("/api/admin/users/:id", verifyAdmin, async (req, res) => {
 
 app.delete("/api/admin/users/:id", verifyAdmin, async (req, res) => {
   try {
-    const { db } = await connectDB();
+    const db = await connectDB();
     const result = await db.collection("user").deleteOne({ _id: new ObjectId(req.params.id) });
     res.send(result);
   } catch (error) {
