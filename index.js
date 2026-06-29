@@ -16,6 +16,7 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 
+app.use(express.json());
 
 
 const uri = process.env.MONGODB_URI;
@@ -94,7 +95,6 @@ app.all("/api/auth/*splat", async (req, res) => {
   res.status(response.status).send(await response.text());
 });
 
-app.use(express.json());
 
 
 async function run() {
@@ -555,10 +555,14 @@ async function run() {
 
   } finally { }
 }
-run().catch(console.dir);
+const port = process.env.PORT || 5000;
 
-
-const port = process.env.PORT;
-app.get('/', (req, res) => res.send('Hello World!'));
-app.listen(port, () => console.log(`Server running on port ${port}`));
+run()
+  .then(() => {
+    app.get("/", (req, res) => res.send("Hello World!"));
+    app.listen(port, () => console.log(`Server running on port ${port}`));
+  })
+  .catch((err) => {
+    console.error("Server startup failed:", err);
+  });
 
