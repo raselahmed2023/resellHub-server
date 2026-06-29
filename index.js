@@ -1,3 +1,4 @@
+
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cookieParser = require("cookie-parser");
@@ -6,8 +7,10 @@ dotenv.config();
 
 
 const cors = require('cors');
-const { betterAuth } = require("better-auth");
-const { mongodbAdapter } = require("better-auth/adapters/mongodb");
+const { betterAuth } = await import("better-auth");
+const { mongodbAdapter } = await import(
+    "better-auth/adapters/mongodb"
+);
 const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -565,4 +568,4 @@ run().catch(console.dir);
 // const port = process.env.PORT;
 // app.get('/', (req, res) => res.send('Hello World!'));
 // app.listen(port, () => console.log(`Server running on port ${port}`));
-module.exports = app;
+export default app;
