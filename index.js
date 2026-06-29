@@ -12,16 +12,26 @@ dotenv.config();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const app = express();
 
-app.use(cors({ 
-  origin: process.env.CLIENT_URL, 
-  credentials: true 
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:3000',
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
 }));
 app.use(express.json());
 app.use(cookieParser());
 
 const uri = process.env.MONGODB_URI;
 
-// ✅ FIX 1: Singleton pattern for DB connection (Serverless friendly)
 let cachedClient = null;
 let cachedDb = null;
 
@@ -29,7 +39,6 @@ async function connectDB() {
   if (cachedClient && cachedDb) {
     return { client: cachedClient, db: cachedDb };
   }
-
   try {
     const client = new MongoClient(uri, {
       serverApi: {
@@ -37,20 +46,16 @@ async function connectDB() {
         strict: true,
         deprecationErrors: true,
       },
-      // ✅ FIX 2: Add timeout settings for serverless
       connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       serverSelectionTimeoutMS: 10000,
       maxPoolSize: 10,
       minPoolSize: 0,
     });
-
     await client.connect();
     console.log("✅ MongoDB Connected");
-    
     cachedClient = client;
     cachedDb = client.db("resellHub");
-    
     return { client: cachedClient, db: cachedDb };
   } catch (error) {
     console.error("❌ MongoDB Connection Error:", error);
@@ -58,20 +63,21 @@ async function connectDB() {
   }
 }
 
-// ✅ FIX 3: Auth setup with lazy connection
+const isProduction = process.env.NODE_ENV === 'production';
+
 const auth = betterAuth({
   database: mongodbAdapter(
-    { 
+    {
       async db() {
         const { db } = await connectDB();
         return db;
       }
-    }, 
+    },
     {}
   ),
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
-  trustedOrigins: [process.env.CLIENT_URL],
+  trustedOrigins: allowedOrigins,
   emailAndPassword: { enabled: true },
   socialProviders: {
     google: {
@@ -80,10 +86,10 @@ const auth = betterAuth({
     },
   },
   advanced: {
-    useSecureCookies: true,
+    useSecureCookies: isProduction,
     defaultCookieAttributes: {
-      secure: true,
-      sameSite: "none",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       path: "/",
     },
     crossSubdomainCookies: { enabled: false },
@@ -97,7 +103,6 @@ const auth = betterAuth({
   },
 });
 
-// ✅ FIX 4: All routes OUTSIDE of any async function
 const getSession = async (req) => {
   try {
     const session = await auth.api.getSession({ headers: req.headers });
@@ -108,7 +113,8 @@ const getSession = async (req) => {
   }
 };
 
-// Auth handler
+// ==================== AUTH ROUTES ====================
+
 app.all("/api/auth/*splat", async (req, res) => {
   try {
     const url = new URL(req.url, process.env.BETTER_AUTH_URL);
@@ -119,7 +125,6 @@ app.all("/api/auth/*splat", async (req, res) => {
         ? JSON.stringify(req.body)
         : undefined,
     });
-
     const response = await auth.handler(webRequest);
     response.headers.forEach((value, key) => {
       res.setHeader(key, value);
@@ -131,24 +136,20 @@ app.all("/api/auth/*splat", async (req, res) => {
   }
 });
 
-// Test route (no DB needed)
 app.get("/api/test", (req, res) => {
   res.send("API Test Working");
 });
 
-app.get('/', (req, res) => res.send('Hello World!'));
+app.get('/', (req, res) => res.send('ResellHub API Running ✅'));
 
 // ==================== PRODUCT ROUTES ====================
 
 app.post("/api/products", async (req, res) => {
   try {
-    await connectDB();
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
 
     const { db } = await connectDB();
-    const productsCollection = db.collection("products");
-    
     const product = {
       ...req.body,
       status: "pending",
@@ -160,8 +161,7 @@ app.post("/api/products", async (req, res) => {
       },
       createdAt: new Date(),
     };
-
-    const result = await productsCollection.insertOne(product);
+    const result = await db.collection("products").insertOne(product);
     res.send(result);
   } catch (error) {
     console.error("POST /api/products error:", error);
@@ -188,7 +188,6 @@ app.get("/api/products/my-products", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const result = await db.collection("products")
       .find({ "sellerInfo.email": session.user.email })
@@ -234,32 +233,26 @@ app.get("/api/stats", async (req, res) => {
 app.get("/api/products", async (req, res) => {
   try {
     const { db } = await connectDB();
-    const productsCollection = db.collection("products");
-    
     const { search, category, condition, sort, page = 1, limit = 12 } = req.query;
     const query = { status: "available" };
     if (search) query.title = { $regex: search, $options: "i" };
     if (category) query.category = category;
     if (condition) query.condition = condition;
 
-    const sortOption = sort === "price_asc" ? { price: 1 } : 
-                       sort === "price_desc" ? { price: -1 } : { createdAt: -1 };
+    const sortOption = sort === "price_asc" ? { price: 1 }
+      : sort === "price_desc" ? { price: -1 }
+      : { createdAt: -1 };
 
     const skip = (Number(page) - 1) * Number(limit);
-    const total = await productsCollection.countDocuments(query);
-    const products = await productsCollection
+    const total = await db.collection("products").countDocuments(query);
+    const products = await db.collection("products")
       .find(query)
       .sort(sortOption)
       .skip(skip)
       .limit(Number(limit))
       .toArray();
 
-    res.send({ 
-      products, 
-      total, 
-      page: Number(page), 
-      totalPages: Math.ceil(total / Number(limit)) 
-    });
+    res.send({ products, total, page: Number(page), totalPages: Math.ceil(total / Number(limit)) });
   } catch (error) {
     console.error("GET /api/products error:", error);
     res.status(500).send({ message: "Server error" });
@@ -269,8 +262,7 @@ app.get("/api/products", async (req, res) => {
 app.get("/api/products/:id", async (req, res) => {
   try {
     const { db } = await connectDB();
-    const { id } = req.params;
-    const result = await db.collection("products").findOne({ _id: new ObjectId(id) });
+    const result = await db.collection("products").findOne({ _id: new ObjectId(req.params.id) });
     if (!result) return res.status(404).send({ message: "Not found" });
     res.send(result);
   } catch (error) {
@@ -283,19 +275,14 @@ app.patch("/api/products/:id", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
-    const { id } = req.params;
-    const product = await db.collection("products").findOne({ _id: new ObjectId(id) });
-    
+    const product = await db.collection("products").findOne({ _id: new ObjectId(req.params.id) });
     if (!product) return res.status(404).send({ message: "Not found" });
-    if (product.sellerInfo.email !== session.user.email) {
-      return res.status(403).send({ message: "Forbidden" });
-    }
+    if (product.sellerInfo.email !== session.user.email) return res.status(403).send({ message: "Forbidden" });
 
     const { title, category, condition, price, stock, description, status, images } = req.body;
     const result = await db.collection("products").updateOne(
-      { _id: new ObjectId(id) },
+      { _id: new ObjectId(req.params.id) },
       { $set: { title, category, condition, price, stock, description, status, images, updatedAt: new Date() } }
     );
     res.send(result);
@@ -309,17 +296,11 @@ app.delete("/api/products/:id", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
-    const { id } = req.params;
-    const product = await db.collection("products").findOne({ _id: new ObjectId(id) });
-    
+    const product = await db.collection("products").findOne({ _id: new ObjectId(req.params.id) });
     if (!product) return res.status(404).send({ message: "Not found" });
-    if (product.sellerInfo.email !== session.user.email) {
-      return res.status(403).send({ message: "Forbidden" });
-    }
-
-    const result = await db.collection("products").deleteOne({ _id: new ObjectId(id) });
+    if (product.sellerInfo.email !== session.user.email) return res.status(403).send({ message: "Forbidden" });
+    const result = await db.collection("products").deleteOne({ _id: new ObjectId(req.params.id) });
     res.send(result);
   } catch (error) {
     console.error("DELETE /api/products/:id error:", error);
@@ -333,20 +314,14 @@ app.patch("/api/users/profile", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const { name, phone, location, photo } = req.body;
     const updateDoc = { $set: {} };
-    
     if (name) updateDoc.$set.name = name;
     if (phone) updateDoc.$set.phone = phone;
     if (location) updateDoc.$set.location = location;
     if (photo) updateDoc.$set.image = photo;
-
-    const result = await db.collection("user").updateOne(
-      { email: session.user.email },
-      updateDoc
-    );
+    const result = await db.collection("user").updateOne({ email: session.user.email }, updateDoc);
     res.send(result);
   } catch (error) {
     console.error("PATCH /api/users/profile error:", error);
@@ -360,22 +335,17 @@ app.get("/api/seller/overview", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const email = session.user.email;
-    
     const [totalProducts, allOrders] = await Promise.all([
       db.collection("products").countDocuments({ "sellerInfo.email": email }),
       db.collection("orders").find({ "sellerInfo.email": email }).toArray()
     ]);
-    
     const deliveredOrders = allOrders.filter(o => o.orderStatus === "delivered");
-    const totalSales = deliveredOrders.length;
     const totalRevenue = deliveredOrders.reduce((sum, o) => sum + o.amount, 0);
     const pendingOrders = allOrders.filter(o => o.orderStatus === "pending").length;
     const recentOrders = allOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
-
-    res.send({ totalProducts, totalSales, totalRevenue, pendingOrders, recentOrders });
+    res.send({ totalProducts, totalSales: deliveredOrders.length, totalRevenue, pendingOrders, recentOrders });
   } catch (error) {
     console.error("GET /api/seller/overview error:", error);
     res.status(500).send({ message: "Server error" });
@@ -386,7 +356,6 @@ app.get("/api/seller/orders", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const result = await db.collection("orders")
       .find({ "sellerInfo.email": session.user.email })
@@ -403,13 +372,10 @@ app.patch("/api/orders/:id/status", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
-    const { id } = req.params;
-    const { orderStatus } = req.body;
     const result = await db.collection("orders").updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { orderStatus } }
+      { _id: new ObjectId(req.params.id) },
+      { $set: { orderStatus: req.body.orderStatus } }
     );
     res.send(result);
   } catch (error) {
@@ -424,10 +390,8 @@ app.get("/api/buyer/overview", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const userId = session.user.id;
-    
     const [totalOrders, completedOrders, pendingOrders, wishlistCount, recentPurchases] = await Promise.all([
       db.collection("orders").countDocuments({ "buyerInfo.userId": userId }),
       db.collection("orders").countDocuments({ "buyerInfo.userId": userId, orderStatus: "delivered" }),
@@ -435,7 +399,6 @@ app.get("/api/buyer/overview", async (req, res) => {
       db.collection("wishlist").countDocuments({ userId }),
       db.collection("orders").find({ "buyerInfo.userId": userId }).sort({ createdAt: -1 }).limit(5).toArray()
     ]);
-
     res.send({ totalOrders, completedOrders, pendingOrders, wishlistCount, recentPurchases });
   } catch (error) {
     console.error("GET /api/buyer/overview error:", error);
@@ -449,7 +412,6 @@ app.get("/api/wishlist", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const items = await db.collection("wishlist").find({ userId: session.user.id }).toArray();
     res.send(items);
@@ -463,12 +425,10 @@ app.post("/api/wishlist", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const { productId } = req.body;
     const exists = await db.collection("wishlist").findOne({ userId: session.user.id, productId });
     if (exists) return res.send({ message: "Already in wishlist" });
-
     const result = await db.collection("wishlist").insertOne({
       userId: session.user.id,
       productId,
@@ -485,10 +445,8 @@ app.delete("/api/wishlist/:productId", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
-    const { productId } = req.params;
-    const result = await db.collection("wishlist").deleteOne({ userId: session.user.id, productId });
+    const result = await db.collection("wishlist").deleteOne({ userId: session.user.id, productId: req.params.productId });
     res.send(result);
   } catch (error) {
     console.error("DELETE /api/wishlist/:productId error:", error);
@@ -502,16 +460,11 @@ app.post("/api/create-payment-intent", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { amount, productId } = req.body;
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount * 100,
       currency: "usd",
-      metadata: {
-        productId,
-        buyerId: session.user.id,
-        buyerEmail: session.user.email,
-      },
+      metadata: { productId, buyerId: session.user.id, buyerEmail: session.user.email },
     });
     res.send({ clientSecret: paymentIntent.client_secret });
   } catch (error) {
@@ -524,10 +477,8 @@ app.post("/api/orders", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const { productId, transactionId, amount, deliveryInfo } = req.body;
-    
     const product = await db.collection("products").findOne({ _id: new ObjectId(productId) });
     if (!product) return res.status(404).send({ message: "Product not found" });
     if (product.stock <= 0) return res.status(400).send({ message: "Product is out of stock" });
@@ -545,7 +496,6 @@ app.post("/api/orders", async (req, res) => {
       orderStatus: "pending",
       createdAt: new Date(),
     };
-
     const result = await db.collection("orders").insertOne(order);
     await db.collection("products").updateOne({ _id: new ObjectId(productId) }, { $inc: { stock: -1 } });
     res.send(result);
@@ -559,7 +509,6 @@ app.get("/api/orders/my-orders", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const result = await db.collection("orders")
       .find({ "buyerInfo.userId": session.user.id })
@@ -576,11 +525,9 @@ app.patch("/api/orders/:id/cancel", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
-    const { id } = req.params;
     const result = await db.collection("orders").updateOne(
-      { _id: new ObjectId(id), "buyerInfo.userId": session.user.id, orderStatus: "pending" },
+      { _id: new ObjectId(req.params.id), "buyerInfo.userId": session.user.id, orderStatus: "pending" },
       { $set: { orderStatus: "cancelled" } }
     );
     res.send(result);
@@ -594,7 +541,6 @@ app.get("/api/orders/payments", async (req, res) => {
   try {
     const session = await getSession(req);
     if (!session) return res.status(401).send({ message: "Unauthorized" });
-    
     const { db } = await connectDB();
     const result = await db.collection("orders")
       .find({ "buyerInfo.userId": session.user.id, paymentStatus: "paid" })
@@ -633,12 +579,7 @@ app.get("/api/admin/overview", verifyAdmin, async (req, res) => {
         { $group: { _id: null, total: { $sum: "$amount" } } }
       ]).toArray()
     ]);
-    res.send({
-      totalUsers,
-      totalProducts,
-      totalOrders,
-      totalRevenue: totalRevenue[0]?.total || 0,
-    });
+    res.send({ totalUsers, totalProducts, totalOrders, totalRevenue: totalRevenue[0]?.total || 0 });
   } catch (error) {
     console.error("GET /api/admin/overview error:", error);
     res.status(500).send({ message: "Server error" });
@@ -670,11 +611,9 @@ app.get("/api/admin/products", verifyAdmin, async (req, res) => {
 app.patch("/api/admin/products/:id", verifyAdmin, async (req, res) => {
   try {
     const { db } = await connectDB();
-    const { id } = req.params;
-    const { status } = req.body;
     const result = await db.collection("products").updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { status } }
+      { _id: new ObjectId(req.params.id) },
+      { $set: { status: req.body.status } }
     );
     res.send(result);
   } catch (error) {
@@ -686,8 +625,7 @@ app.patch("/api/admin/products/:id", verifyAdmin, async (req, res) => {
 app.delete("/api/admin/products/:id", verifyAdmin, async (req, res) => {
   try {
     const { db } = await connectDB();
-    const { id } = req.params;
-    const result = await db.collection("products").deleteOne({ _id: new ObjectId(id) });
+    const result = await db.collection("products").deleteOne({ _id: new ObjectId(req.params.id) });
     res.send(result);
   } catch (error) {
     console.error("DELETE /api/admin/products/:id error:", error);
@@ -709,12 +647,11 @@ app.get("/api/admin/orders", verifyAdmin, async (req, res) => {
 app.patch("/api/admin/users/:id", verifyAdmin, async (req, res) => {
   try {
     const { db } = await connectDB();
-    const { id } = req.params;
     const { role, status } = req.body;
     const updateDoc = { $set: {} };
     if (role) updateDoc.$set.role = role;
     if (status) updateDoc.$set.status = status;
-    const result = await db.collection("user").updateOne({ _id: new ObjectId(id) }, updateDoc);
+    const result = await db.collection("user").updateOne({ _id: new ObjectId(req.params.id) }, updateDoc);
     res.send(result);
   } catch (error) {
     console.error("PATCH /api/admin/users/:id error:", error);
@@ -725,8 +662,7 @@ app.patch("/api/admin/users/:id", verifyAdmin, async (req, res) => {
 app.delete("/api/admin/users/:id", verifyAdmin, async (req, res) => {
   try {
     const { db } = await connectDB();
-    const { id } = req.params;
-    const result = await db.collection("user").deleteOne({ _id: new ObjectId(id) });
+    const result = await db.collection("user").deleteOne({ _id: new ObjectId(req.params.id) });
     res.send(result);
   } catch (error) {
     console.error("DELETE /api/admin/users/:id error:", error);
@@ -734,5 +670,7 @@ app.delete("/api/admin/users/:id", verifyAdmin, async (req, res) => {
   }
 });
 
-// ✅ FIX 5: Export app at the END after all routes are registered
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
 export default app;
