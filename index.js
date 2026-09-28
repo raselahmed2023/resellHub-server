@@ -8,9 +8,6 @@ import Stripe from "stripe";
 
 dotenv.config();
 
-/* =========================================================
-   ENVIRONMENT VALIDATION
-========================================================= */
 
 const REQUIRED_ENV = [
   "MONGODB_URI",
@@ -52,9 +49,7 @@ if (
   );
 }
 
-/* =========================================================
-   APP / STRIPE
-========================================================= */
+
 
 const stripe =
   new Stripe(
@@ -85,9 +80,7 @@ app.use(
   })
 );
 
-/* =========================================================
-   MONGODB
-========================================================= */
+
 
 const client =
   new MongoClient(
@@ -107,9 +100,7 @@ const client =
     }
   );
 
-/* =========================================================
-   BETTER AUTH
-========================================================= */
+
 
 const auth =
   betterAuth({
@@ -220,9 +211,7 @@ const auth =
     },
   });
 
-/* =========================================================
-   GENERIC HELPERS
-========================================================= */
+
 
 const asyncHandler =
   (fn) =>
@@ -290,9 +279,7 @@ const hasOwn =
       key
     );
 
-/* =========================================================
-   ALLOWED VALUES
-========================================================= */
+
 
 const CATEGORIES =
   new Set([
@@ -371,9 +358,7 @@ const SELLER_ORDER_TRANSITIONS =
       new Set(),
   };
 
-/* =========================================================
-   PRODUCT VALIDATION
-========================================================= */
+
 
 function validateProductPayload(
   body = {}
@@ -526,9 +511,7 @@ function validateProductPayload(
   };
 }
 
-/* =========================================================
-   DELIVERY VALIDATION
-========================================================= */
+
 
 function validateDeliveryInfo(
   info = {}
@@ -587,9 +570,7 @@ function validateDeliveryInfo(
   };
 }
 
-/* =========================================================
-   PAYMENT HELPERS
-========================================================= */
+
 
 function calculateOrderTotal(
   product
@@ -630,9 +611,7 @@ async function refundPaymentIntent(
   );
 }
 
-/* =========================================================
-   NODE HEADERS -> FETCH HEADERS
-========================================================= */
+
 
 function buildFetchHeaders(
   nodeHeaders
@@ -676,9 +655,7 @@ function buildFetchHeaders(
   return headers;
 }
 
-/* =========================================================
-   BETTER AUTH ROUTE
-========================================================= */
+
 
 app.all(
   "/api/auth/*splat",
@@ -786,9 +763,7 @@ app.all(
   )
 );
 
-/* =========================================================
-   DATABASE / ROUTES
-========================================================= */
+
 
 async function run() {
   await client.connect();
@@ -823,9 +798,7 @@ async function run() {
       "contactMessages"
     );
 
-  /* =======================================================
-     DATABASE INDEXES
-  ======================================================= */
+
 
   await Promise.all([
     productsCollection.createIndex(
@@ -911,9 +884,7 @@ async function run() {
     );
   }
 
-  /* =======================================================
-     AUTH HELPERS
-  ======================================================= */
+
 
   const getSessionContext =
     async (
@@ -1092,9 +1063,7 @@ async function run() {
       ],
     });
 
-  /* =======================================================
-     CANCEL + REFUND HELPER
-  ======================================================= */
+
 
   const cancelOrderWithRefund =
     async ({
@@ -1250,9 +1219,7 @@ async function run() {
       }
     };
 
-  /* =======================================================
-     HEALTH
-  ======================================================= */
+
 
   app.get(
     "/",
@@ -1652,9 +1619,6 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     FEATURED PRODUCTS
-  ======================================================= */
 
   app.get(
     "/api/products/featured",
@@ -1688,9 +1652,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     SELLER PRODUCTS
-  ======================================================= */
+
 
   app.get(
     "/api/products/my-products",
@@ -1778,9 +1740,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     CATEGORY STATS
-  ======================================================= */
+
 
   app.get(
     "/api/categories/stats",
@@ -1833,9 +1793,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     PUBLIC STATS
-  ======================================================= */
+
 
   app.get(
     "/api/stats",
@@ -1906,9 +1864,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     PRODUCT SEARCH / FILTER
-  ======================================================= */
+
 
   app.get(
     "/api/products",
@@ -2221,9 +2177,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     SINGLE PRODUCT
-  ======================================================= */
+
 
   app.get(
     "/api/products/:id",
@@ -2327,9 +2281,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     SELLER EDIT PRODUCT
-  ======================================================= */
+ 
 
   app.patch(
     "/api/products/:id",
@@ -2432,9 +2384,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     SELLER DELETE PRODUCT
-  ======================================================= */
+
 
   app.delete(
     "/api/products/:id",
@@ -2521,9 +2471,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     SELLER OVERVIEW
-  ======================================================= */
+
 
   app.get(
     "/api/seller/overview",
@@ -2627,9 +2575,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     BUYER OVERVIEW
-  ======================================================= */
+
 
   app.get(
     "/api/buyer/overview",
@@ -2708,9 +2654,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     WISHLIST
-  ======================================================= */
+ 
 
   app.get(
     "/api/wishlist",
@@ -2952,9 +2896,7 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     STRIPE PAYMENT INTENT
-  ======================================================= */
+
 
   app.post(
     "/api/create-payment-intent",
@@ -2966,11 +2908,6 @@ async function run() {
         req,
         res
       ) => {
-        /*
-          IMPORTANT:
-          Browser sends ONLY productId.
-          Browser no longer decides price.
-        */
 
         const productId =
           cleanString(
@@ -3095,9 +3032,8 @@ async function run() {
     )
   );
 
-  /* =======================================================
-     CREATE ORDER
-  ======================================================= */
+
+  
 
   app.post(
     "/api/orders",
@@ -3169,10 +3105,7 @@ async function run() {
             });
         }
 
-        /*
-          Prevent duplicate order
-          using same Stripe transaction.
-        */
+
 
         const existingOrder =
           await ordersCollection.findOne(
@@ -3207,10 +3140,7 @@ async function run() {
           });
         }
 
-        /*
-          Verify payment directly
-          from Stripe.
-        */
+        
 
         const paymentIntent =
           await stripe.paymentIntents.retrieve(
@@ -3299,10 +3229,7 @@ async function run() {
             });
         }
 
-        /*
-          Verify Stripe amount matches
-          CURRENT DB product price.
-        */
+        
 
         const expectedAmount =
           calculateOrderTotal(
@@ -3334,11 +3261,7 @@ async function run() {
             });
         }
 
-        /*
-          Atomic stock reservation.
-          Stops two buyers from buying
-          the final stock simultaneously.
-        */
+       
 
         const reservedProduct =
           await productsCollection.findOneAndUpdate(
@@ -3483,10 +3406,7 @@ async function run() {
         } catch (
           error
         ) {
-          /*
-            Restore stock if DB order
-            creation fails.
-          */
+          
 
           await productsCollection.updateOne(
             {
@@ -3506,11 +3426,7 @@ async function run() {
             }
           );
 
-          /*
-            Race-condition duplicate:
-            return existing order rather
-            than creating another one.
-          */
+        
 
           if (
             error?.code ===
@@ -4602,6 +4518,517 @@ async function run() {
     )
   );
 
+
+app.post(
+  "/api/ai/chat",
+
+  asyncHandler(
+    async (req, res) => {
+      if (!process.env.GEMINI_API_KEY) {
+        return res
+          .status(503)
+          .send({
+            message:
+              "ReSell Guide is temporarily unavailable.",
+          });
+      }
+
+      const message =
+        cleanString(
+          req.body.message,
+          600
+        );
+
+      if (!message) {
+        return res
+          .status(400)
+          .send({
+            message:
+              "Please enter a message.",
+          });
+      }
+
+      const history =
+        Array.isArray(
+          req.body.history
+        )
+          ? req.body.history
+              .slice(-6)
+              .map((item) => ({
+                role:
+                  item?.role ===
+                  "assistant"
+                    ? "assistant"
+                    : "user",
+
+                content:
+                  cleanString(
+                    item?.content,
+                    400
+                  ),
+              }))
+              .filter(
+                (item) =>
+                  item.content
+              )
+          : [];
+
+      const historyText =
+        history
+          .map(
+            (item) =>
+              `${item.role}: ${item.content}`
+          )
+          .join("\n");
+
+      const prompt = `
+You are ReSell Guide, the AI assistant for ReSellHub, a pre-owned marketplace.
+
+You help users:
+- find products available on ReSellHub
+- understand product conditions
+- understand how to buy
+- understand how to sell
+- understand checkout, wishlist and orders
+- navigate the marketplace
+
+ReSellHub facts:
+- Accounts can be Buyer or Seller.
+- Buyers can browse products, use wishlist, purchase products and manage orders.
+- Sellers can add and manage their own product listings and manage seller orders.
+- Seller product listings go through marketplace status handling before becoming publicly available.
+- Only available products with stock should be recommended.
+- Payments are handled securely through Stripe.
+- Product information must come from the ReSellHub database.
+- Never invent a product, price, stock quantity or seller.
+- If the user asks something unrelated to ReSellHub, politely guide them back to marketplace help.
+
+Understand both English and Bangla/Banglish.
+
+Examples:
+"5k" means 5000.
+"5 হাজার" means 5000.
+"20k" means 20000.
+"২০ হাজার" means 20000.
+
+Allowed categories:
+Electronics
+Furniture
+Vehicles
+Fashion
+Mobile Phones
+Books
+Sports
+Other
+
+Allowed conditions:
+New
+Like New
+Good
+Fair
+Used
+Refurbished
+
+Return ONLY valid JSON with this exact structure:
+
+{
+  "type": "product_search" | "platform_help",
+  "search": "",
+  "category": "",
+  "condition": "",
+  "minPrice": null,
+  "maxPrice": null,
+  "sort": "newest" | "price_asc" | "price_desc",
+  "answer": ""
+}
+
+For product_search:
+- Extract the user's requested product keyword into search.
+- Use an allowed category only when clearly applicable.
+- Use an allowed condition only when requested.
+- Extract price limits when provided.
+- Use price_asc if they ask for cheapest or low price.
+- Use price_desc if they ask for expensive/highest price.
+- answer should be a short natural response in the same language style as the user.
+- Do not mention any specific product because database results will be added later.
+
+For platform_help:
+- search, category and condition should be empty.
+- minPrice and maxPrice should be null.
+- Answer the question briefly using only the ReSellHub facts above.
+- Use the same language style as the user.
+
+Conversation history:
+${historyText || "No previous messages"}
+
+Current user message:
+${message}
+`;
+
+      const aiResponse =
+        await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              "x-goog-api-key":
+                process.env
+                  .GEMINI_API_KEY,
+            },
+
+            body:
+              JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+
+                    parts: [
+                      {
+                        text:
+                          prompt,
+                      },
+                    ],
+                  },
+                ],
+
+                generationConfig:
+                  {
+                    temperature:
+                      0.1,
+
+                    responseMimeType:
+                      "application/json",
+                  },
+              }),
+          }
+        );
+
+      if (!aiResponse.ok) {
+        const providerError =
+          await aiResponse.text();
+
+        console.error(
+          "Gemini API error:",
+          providerError
+        );
+
+        return res
+          .status(502)
+          .send({
+            message:
+              "ReSell Guide could not respond right now.",
+          });
+      }
+
+      const aiData =
+        await aiResponse.json();
+
+      const rawText =
+        aiData?.candidates?.[0]
+          ?.content?.parts
+          ?.map(
+            (part) =>
+              part?.text || ""
+          )
+          .join("")
+          .trim();
+
+      if (!rawText) {
+        return res
+          .status(502)
+          .send({
+            message:
+              "ReSell Guide returned an empty response.",
+          });
+      }
+
+      let intent;
+
+      try {
+        intent =
+          JSON.parse(
+            rawText
+              .replace(
+                /^```json/i,
+                ""
+              )
+              .replace(
+                /```$/i,
+                ""
+              )
+              .trim()
+          );
+      } catch {
+        console.error(
+          "Invalid AI JSON:",
+          rawText
+        );
+
+        return res
+          .status(502)
+          .send({
+            message:
+              "ReSell Guide could not understand the request.",
+          });
+      }
+
+      if (
+        intent.type !==
+        "product_search"
+      ) {
+        return res.send({
+          reply:
+            cleanString(
+              intent.answer,
+              1000
+            ) ||
+            "How can I help you with ReSellHub?",
+
+          products: [],
+        });
+      }
+
+      const query = {
+        status:
+          "available",
+
+        stock: {
+          $gt: 0,
+        },
+      };
+
+      const category =
+        cleanString(
+          intent.category,
+          50
+        );
+
+      if (
+        category &&
+        CATEGORIES.has(
+          category
+        )
+      ) {
+        query.category =
+          category;
+      }
+
+      const condition =
+        cleanString(
+          intent.condition,
+          30
+        );
+
+      if (
+        condition &&
+        CONDITIONS.has(
+          condition
+        )
+      ) {
+        query.condition =
+          condition;
+      }
+
+      const minPrice =
+        Number(
+          intent.minPrice
+        );
+
+      const maxPrice =
+        Number(
+          intent.maxPrice
+        );
+
+      const hasMinPrice =
+        intent.minPrice !==
+          null &&
+        intent.minPrice !==
+          "" &&
+        Number.isFinite(
+          minPrice
+        ) &&
+        minPrice >= 0;
+
+      const hasMaxPrice =
+        intent.maxPrice !==
+          null &&
+        intent.maxPrice !==
+          "" &&
+        Number.isFinite(
+          maxPrice
+        ) &&
+        maxPrice >= 0;
+
+      if (
+        hasMinPrice ||
+        hasMaxPrice
+      ) {
+        query.price = {};
+
+        if (hasMinPrice) {
+          query.price.$gte =
+            minPrice;
+        }
+
+        if (hasMaxPrice) {
+          query.price.$lte =
+            maxPrice;
+        }
+      }
+
+      const search =
+        cleanString(
+          intent.search,
+          100
+        );
+
+      if (search) {
+        const escaped =
+          escapeRegExp(
+            search
+          );
+
+        query.$or = [
+          {
+            title: {
+              $regex:
+                escaped,
+
+              $options:
+                "i",
+            },
+          },
+
+          {
+            description: {
+              $regex:
+                escaped,
+
+              $options:
+                "i",
+            },
+          },
+        ];
+      }
+
+      let sortOption = {
+        createdAt: -1,
+      };
+
+      if (
+        intent.sort ===
+        "price_asc"
+      ) {
+        sortOption = {
+          price: 1,
+        };
+      }
+
+      if (
+        intent.sort ===
+        "price_desc"
+      ) {
+        sortOption = {
+          price: -1,
+        };
+      }
+
+      const products =
+        await productsCollection
+          .find(
+            query,
+
+            {
+              projection: {
+                title: 1,
+                category: 1,
+                condition: 1,
+                price: 1,
+                stock: 1,
+                images: 1,
+                sellerInfo: 1,
+                createdAt: 1,
+              },
+            }
+          )
+          .sort(
+            sortOption
+          )
+          .limit(6)
+          .toArray();
+
+      if (
+        products.length === 0
+      ) {
+        return res.send({
+          reply:
+            "I couldn't find a matching available product right now. Try changing the product name, condition, or price range.",
+
+          products: [],
+        });
+      }
+
+      const aiReply =
+        cleanString(
+          intent.answer,
+          600
+        );
+
+      res.send({
+        reply:
+          aiReply ||
+          `I found ${products.length} matching product${
+            products.length ===
+            1
+              ? ""
+              : "s"
+          } for you.`,
+
+        products:
+          products.map(
+            (product) => ({
+              _id:
+                product._id,
+
+              title:
+                product.title,
+
+              category:
+                product.category,
+
+              condition:
+                product.condition,
+
+              price:
+                product.price,
+
+              stock:
+                product.stock,
+
+              image:
+                product
+                  .images?.[0] ||
+                "",
+
+              seller:
+                product
+                  .sellerInfo
+                  ?.name ||
+                "Seller",
+
+              href:
+                `/products/${product._id}`,
+            })
+          ),
+      });
+    }
+  )
+);
 
 
   app.post(
