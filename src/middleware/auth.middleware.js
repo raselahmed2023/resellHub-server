@@ -35,6 +35,8 @@ export const getSessionContext = async (req) => {
         dbUser.status ||
         session.user.status ||
         "active",
+      roleSelected:
+        dbUser.roleSelected === true,
     },
   };
 };
@@ -80,6 +82,20 @@ export const requireRole =
     verifyAuthenticated,
 
     (req, res, next) => {
+      if (
+        req.user.role !== "admin" &&
+        req.user.roleSelected !== true
+      ) {
+        return res
+          .status(403)
+          .send({
+            message:
+              "Complete your account setup before continuing.",
+            code:
+              "ROLE_SELECTION_REQUIRED",
+          });
+      }
+
       if (
         !roles.includes(
           req.user.role

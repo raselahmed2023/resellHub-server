@@ -36,6 +36,7 @@ export const auth = betterAuth({
     google: {
       clientId: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
+      disableImplicitSignUp: true,
     },
   },
 
