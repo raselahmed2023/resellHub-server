@@ -1,11 +1,15 @@
 import express from "express";
 import cors from "cors";
+import { toNodeHandler } from "better-auth/node";
 
 import {
   CLIENT_URL,
 } from "./config/env.js";
 
-import authRoutes from "./routes/auth.routes.js";
+import {
+  auth,
+} from "./config/auth.js";
+
 import userRoutes from "./routes/user.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
@@ -25,11 +29,14 @@ app.set(
 
 app.use(
   cors({
-    origin:
-      CLIENT_URL,
-    credentials:
-      true,
+    origin: CLIENT_URL,
+    credentials: true,
   })
+);
+
+app.all(
+  "/api/auth/*splat",
+  toNodeHandler(auth)
 );
 
 app.use(
@@ -52,15 +59,9 @@ app.get(
   (req, res) => {
     res.send({
       ok: true,
-      service:
-        "resellhub-server",
+      service: "resellhub-server",
     });
   }
-);
-
-app.use(
-  "/api/auth",
-  authRoutes
 );
 
 app.use(
@@ -111,8 +112,7 @@ app.use(
 app.use(
   (req, res) => {
     res.status(404).send({
-      message:
-        "API route not found.",
+      message: "API route not found.",
     });
   }
 );
@@ -133,8 +133,7 @@ app.use(
     if (
       error?.type ===
         "entity.parse.failed" ||
-      error instanceof
-        SyntaxError
+      error instanceof SyntaxError
     ) {
       return res.status(400).send({
         message:
@@ -162,9 +161,7 @@ app.use(
     }
 
     const status =
-      Number(
-        error?.status
-      );
+      Number(error?.status);
 
     if (
       Number.isInteger(status) &&
