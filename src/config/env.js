@@ -45,12 +45,17 @@ export const GOOGLE_CLIENT_SECRET =
 export const STRIPE_SECRET_KEY =
   process.env.STRIPE_SECRET_KEY;
 
-export const GEMINI_API_KEY =
-  process.env.GEMINI_API_KEY || "";
+export const XAI_API_KEY =
+  process.env.XAI_API_KEY || "";
 
-export const GEMINI_MODEL =
-  process.env.GEMINI_MODEL ||
-  "gemini-3.8-flash";
+export const XAI_MODEL =
+  process.env.XAI_MODEL || "grok-4.7";
+
+export const OPENROUTER_API_KEY =
+  process.env.OPENROUTER_API_KEY || "";
+
+export const OPENROUTER_MODEL =
+  process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
 
 export const IS_PRODUCTION =
   process.env.NODE_ENV === "production";
