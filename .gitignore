@@ -2,3 +2,4 @@
 config.bat
 node_modules
 public/fonts/
+.env
