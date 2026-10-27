@@ -20,6 +20,7 @@ const client = new MongoClient(
 
 export const connectDB = async () => {
   await client.connect();
+
   return client.db("resellHub");
 };
 
@@ -27,12 +28,32 @@ export const db =
   client.db("resellHub");
 
 export const collections = {
-  users: db.collection("user"),
-  products: db.collection("products"),
-  wishlist: db.collection("wishlist"),
-  orders: db.collection("orders"),
+  users:
+    db.collection("user"),
+
+  products:
+    db.collection("products"),
+
+  wishlist:
+    db.collection("wishlist"),
+
+  orders:
+    db.collection("orders"),
+
   contactMessages:
-    db.collection("contactMessages"),
+    db.collection(
+      "contactMessages"
+    ),
+
+  institutions:
+    db.collection(
+      "institutions"
+    ),
+
+  campuses:
+    db.collection(
+      "campuses"
+    ),
 };
 
 export { client };
