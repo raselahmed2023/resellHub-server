@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
-import { toNodeHandler } from "better-auth/node";
+
+import {
+  toNodeHandler,
+} from "better-auth/node";
 
 import {
   CLIENT_URL,
@@ -10,89 +13,182 @@ import {
   auth,
 } from "./config/auth.js";
 
+
 import userRoutes from "./routes/user.routes.js";
+
 import productRoutes from "./routes/product.routes.js";
+
 import statsRoutes from "./routes/stats.routes.js";
+
 import wishlistRoutes from "./routes/wishlist.routes.js";
+
 import orderRoutes from "./routes/order.routes.js";
+
 import sellerRoutes from "./routes/seller.routes.js";
+
 import adminRoutes from "./routes/admin.routes.js";
+
 import aiRoutes from "./routes/ai.routes.js";
+
 import contactRoutes from "./routes/contact.routes.js";
 
-const app = express();
+import institutionRoutes from "./routes/institution.routes.js";
+
+import campusRoutes from "./routes/campus.routes.js";
+
+import studentZoneRoutes from "./routes/student-zone.routes.js";
+
+const app =
+  express();
+
+
 
 app.set(
   "trust proxy",
   1
 );
 
+
+
 app.use(
   cors({
-    origin: CLIENT_URL,
-    credentials: true,
+    origin:
+      CLIENT_URL,
+
+    credentials:
+      true,
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
   })
 );
+
+
 
 app.all(
   "/api/auth/*splat",
-  toNodeHandler(auth)
+  toNodeHandler(
+    auth
+  )
 );
+
+
 
 app.use(
   express.json({
-    limit: "1mb",
+    limit:
+      "1mb",
   })
 );
 
+
+
 app.get(
   "/",
-  (req, res) => {
+
+  (
+    req,
+    res
+  ) => {
     res.send(
       "ReSellHub API is running"
     );
   }
 );
 
+
+
 app.get(
   "/api/health",
-  (req, res) => {
+
+  (
+    req,
+    res
+  ) => {
     res.send({
       ok: true,
-      service: "resellhub-server",
+
+      service:
+        "resellhub-server",
     });
   }
 );
+
+
 
 app.use(
   "/api/users",
   userRoutes
 );
 
+
+
+app.use(
+  "/api/institutions",
+  institutionRoutes
+);
+
+
+
+app.use(
+  "/api/campuses",
+  campusRoutes
+);
+
+
+
+app.use(
+  "/api/student-zone",
+  studentZoneRoutes
+);
+
+
+
 app.use(
   "/api/products",
   productRoutes
 );
+
+
 
 app.use(
   "/api/wishlist",
   wishlistRoutes
 );
 
+
+
 app.use(
   "/api/admin",
   adminRoutes
 );
+
+
 
 app.use(
   "/api/ai",
   aiRoutes
 );
 
+
+
 app.use(
   "/api/contact",
   contactRoutes
 );
+
+
 
 app.use(
   "/api",
@@ -109,13 +205,22 @@ app.use(
   sellerRoutes
 );
 
+
+
 app.use(
-  (req, res) => {
-    res.status(404).send({
-      message: "API route not found.",
-    });
+  (
+    req,
+    res
+  ) => {
+    res
+      .status(404)
+      .send({
+        message:
+          "API route not found.",
+      });
   }
 );
+
 
 app.use(
   (
@@ -124,52 +229,92 @@ app.use(
     res,
     next
   ) => {
-    console.error(error);
+    console.error(
+      error
+    );
 
-    if (res.headersSent) {
-      return next(error);
+    if (
+      res.headersSent
+    ) {
+      return next(
+        error
+      );
     }
+
+    /*
+     * Invalid JSON
+     */
 
     if (
       error?.type ===
         "entity.parse.failed" ||
-      error instanceof SyntaxError
+      (
+        error instanceof
+          SyntaxError &&
+        error?.status ===
+          400
+      )
     ) {
-      return res.status(400).send({
-        message:
-          "Invalid JSON request.",
-      });
+      return res
+        .status(400)
+        .send({
+          message:
+            "Invalid JSON request.",
+        });
     }
 
+    /*
+     * MongoDB duplicate key
+     */
+
     if (
-      error?.code === 11000
+      error?.code ===
+      11000
     ) {
-      return res.status(409).send({
-        message:
-          "Duplicate record.",
-      });
+      return res
+        .status(409)
+        .send({
+          message:
+            "Duplicate record.",
+        });
     }
+
+    /*
+     * Stripe
+     */
 
     if (
       error?.type ===
       "StripeInvalidRequestError"
     ) {
-      return res.status(400).send({
-        message:
-          "Payment request could not be processed.",
-      });
+      return res
+        .status(400)
+        .send({
+          message:
+            "Payment request could not be processed.",
+        });
     }
 
+    /*
+     * Service errors
+     */
+
     const status =
-      Number(error?.status);
+      Number(
+        error?.status
+      );
 
     if (
-      Number.isInteger(status) &&
+      Number.isInteger(
+        status
+      ) &&
       status >= 400 &&
       status <= 599
     ) {
       return res
-        .status(status)
+        .status(
+          status
+        )
         .send({
           message:
             error.message ||
@@ -177,10 +322,12 @@ app.use(
         });
     }
 
-    return res.status(500).send({
-      message:
-        "Internal server error.",
-    });
+    return res
+      .status(500)
+      .send({
+        message:
+          "Internal server error.",
+      });
   }
 );
 

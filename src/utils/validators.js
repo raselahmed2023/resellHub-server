@@ -103,8 +103,7 @@ export function validateProductPayload(
       price
     ) ||
     price <= 0 ||
-    price >
-      99_999_999
+    price > 99_999_999
   ) {
     return {
       error:
@@ -117,8 +116,7 @@ export function validateProductPayload(
       stock
     ) ||
     stock < 0 ||
-    stock >
-      100_000
+    stock > 100_000
   ) {
     return {
       error:
@@ -145,16 +143,90 @@ export function validateProductPayload(
     };
   }
 
+  /*
+   * Student Zone is OPTIONAL.
+   *
+   * Important:
+   * if frontend does not send studentZone at all,
+   * we do not automatically overwrite existing
+   * Student Zone information during product edit.
+   */
+
+  const hasStudentZone =
+    Object.prototype.hasOwnProperty.call(
+      body,
+      "studentZone"
+    );
+
+  let studentZone;
+
+  if (hasStudentZone) {
+    const rawStudentZone =
+      body.studentZone &&
+      typeof body.studentZone ===
+        "object"
+        ? body.studentZone
+        : {};
+
+    const enabled =
+      rawStudentZone.enabled ===
+        true ||
+      rawStudentZone.enabled ===
+        "true";
+
+    if (!enabled) {
+      studentZone = {
+        enabled: false,
+      };
+    } else {
+      const institutionId =
+        cleanString(
+          rawStudentZone
+            .institutionId,
+          80
+        );
+
+      const campusId =
+        cleanString(
+          rawStudentZone
+            .campusId,
+          80
+        );
+
+      if (
+        !institutionId
+      ) {
+        return {
+          error:
+            "Select an institution for Student Zone.",
+        };
+      }
+
+      studentZone = {
+        enabled: true,
+        institutionId,
+        campusId,
+      };
+    }
+  }
+
+  const value = {
+    title,
+    category,
+    condition,
+    description,
+    price,
+    stock,
+    images,
+  };
+
+  if (hasStudentZone) {
+    value.studentZone =
+      studentZone;
+  }
+
   return {
-    value: {
-      title,
-      category,
-      condition,
-      description,
-      price,
-      stock,
-      images,
-    },
+    value,
   };
 }
 

@@ -1,62 +1,108 @@
-import { auth } from "../config/auth.js";
-import { collections } from "../config/db.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
+import {
+  fromNodeHeaders,
+} from "better-auth/node";
 
-export const getSessionContext = async (req) => {
-  const session =
-    await auth.api.getSession({
-      headers: req.headers,
-    });
+import {
+  auth,
+} from "../config/auth.js";
 
-  if (!session?.user?.email) {
-    return null;
-  }
+import {
+  collections,
+} from "../config/db.js";
 
-  const dbUser =
-    await collections.users.findOne({
-      email: session.user.email,
-    });
+import {
+  asyncHandler,
+} from "../utils/asyncHandler.js";
 
-  if (!dbUser) {
-    return null;
-  }
 
-  return {
-    session,
-    user: {
+
+export const getSessionContext =
+  async (req) => {
+    const session =
+      await auth.api.getSession({
+        headers:
+          fromNodeHeaders(
+            req.headers
+          ),
+      });
+
+    if (
+      !session?.user
+        ?.email
+    ) {
+      return null;
+    }
+
+    const dbUser =
+      await collections
+        .users
+        .findOne({
+          email:
+            session.user
+              .email,
+        });
+
+    if (!dbUser) {
+      return null;
+    }
+
+    const user = {
       ...session.user,
       ...dbUser,
-      id: session.user.id,
+
+      id:
+        session.user.id,
+
       role:
         dbUser.role ||
-        session.user.role ||
+        session.user
+          .role ||
         "buyer",
+
       status:
         dbUser.status ||
-        session.user.status ||
+        session.user
+          .status ||
         "active",
+
       roleSelected:
-        dbUser.roleSelected === true,
-    },
+        dbUser
+          .roleSelected ===
+        true,
+    };
+
+    return {
+      session,
+      user,
+    };
   };
-};
+
+
 
 export const verifyAuthenticated =
   asyncHandler(
-    async (req, res, next) => {
+    async (
+      req,
+      res,
+      next
+    ) => {
       const context =
-        await getSessionContext(req);
+        await getSessionContext(
+          req
+        );
 
       if (!context) {
         return res
           .status(401)
           .send({
-            message: "Unauthorized",
+            message:
+              "Unauthorized",
           });
       }
 
       if (
-        context.user.status ===
+        context.user
+          .status ===
         "blocked"
       ) {
         return res
@@ -77,20 +123,31 @@ export const verifyAuthenticated =
     }
   );
 
+
 export const requireRole =
   (...roles) => [
     verifyAuthenticated,
 
-    (req, res, next) => {
+    (
+      req,
+      res,
+      next
+    ) => {
+      
+
       if (
-        req.user.role !== "admin" &&
-        req.user.roleSelected !== true
+        req.user.role !==
+          "admin" &&
+        req.user
+          .roleSelected !==
+          true
       ) {
         return res
           .status(403)
           .send({
             message:
               "Complete your account setup before continuing.",
+
             code:
               "ROLE_SELECTION_REQUIRED",
           });
@@ -104,7 +161,8 @@ export const requireRole =
         return res
           .status(403)
           .send({
-            message: "Forbidden",
+            message:
+              "Forbidden",
           });
       }
 
@@ -112,14 +170,24 @@ export const requireRole =
     },
   ];
 
+
+
 export const verifyBuyer =
-  requireRole("buyer");
+  requireRole(
+    "buyer"
+  );
 
 export const verifySeller =
-  requireRole("seller");
+  requireRole(
+    "seller"
+  );
 
 export const verifyAdmin =
-  requireRole("admin");
+  requireRole(
+    "admin"
+  );
+
+
 
 export const sellerProductQuery =
   (user) => ({
@@ -128,12 +196,15 @@ export const sellerProductQuery =
         "sellerInfo.userId":
           user.id,
       },
+
       {
         "sellerInfo.email":
           user.email,
       },
     ],
   });
+
+
 
 export const sellerOrderQuery =
   (user) => ({
@@ -142,6 +213,7 @@ export const sellerOrderQuery =
         "sellerInfo.userId":
           user.id,
       },
+
       {
         "sellerInfo.email":
           user.email,

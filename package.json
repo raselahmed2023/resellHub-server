@@ -5,9 +5,10 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon index.js",
-    "start": "node index.js"
-  },
+  "dev": "nodemon index.js",
+  "start": "node index.js",
+  "sync:institutions": "node scripts/sync-institutions.js"
+},
   "dependencies": {
     "better-auth": "^1.6.22",
     "cheerio": "^1.2.0",
