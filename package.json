@@ -5,13 +5,11 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-  "dev": "nodemon index.js",
-  "start": "node index.js",
-  "sync:institutions": "node scripts/sync-institutions.js"
-},
+    "dev": "nodemon index.js",
+    "start": "node index.js"
+  },
   "dependencies": {
     "better-auth": "^1.6.22",
-    "cheerio": "^1.2.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

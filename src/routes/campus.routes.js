@@ -3,15 +3,11 @@ import {
 } from "express";
 
 import {
-  verifyAdmin,
-} from "../middleware/auth.middleware.js";
-
-import {
   asyncHandler,
 } from "../utils/asyncHandler.js";
 
 import {
-  importCampuses,
+  getCampusById,
   listCampuses,
 } from "../services/campus.service.js";
 
@@ -49,27 +45,22 @@ router.get(
   )
 );
 
-router.post(
-  "/import",
-
-  ...verifyAdmin,
+router.get(
+  "/:id",
 
   asyncHandler(
     async (
       req,
       res
     ) => {
-      const result =
-        await importCampuses(
-          req.body
-            ?.campuses
+      const campus =
+        await getCampusById(
+          req.params.id
         );
 
-      res
-        .status(201)
-        .send(
-          result
-        );
+      res.send(
+        campus
+      );
     }
   )
 );
