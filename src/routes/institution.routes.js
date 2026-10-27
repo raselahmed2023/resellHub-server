@@ -3,18 +3,11 @@ import {
 } from "express";
 
 import {
-  collections,
-} from "../config/db.js";
-
-import {
   asyncHandler,
 } from "../utils/asyncHandler.js";
 
 import {
-  toObjectId,
-} from "../utils/objectId.js";
-
-import {
+  getInstitutionById,
   listInstitutions,
 } from "../services/institution.service.js";
 
@@ -30,22 +23,19 @@ router.get(
       res
     ) => {
       const result =
-        await listInstitutions(
-          {
-            search:
-              req.query
-                .search,
+        await listInstitutions({
+          search:
+            req.query.search,
 
-            type:
-              req.query.type,
+          type:
+            req.query.type,
 
-            page:
-              req.query.page,
+          page:
+            req.query.page,
 
-            limit:
-              req.query.limit,
-          }
-        );
+          limit:
+            req.query.limit,
+        });
 
       res.send(
         result
@@ -62,41 +52,10 @@ router.get(
       req,
       res
     ) => {
-      const objectId =
-        toObjectId(
+      const institution =
+        await getInstitutionById(
           req.params.id
         );
-
-      if (!objectId) {
-        return res
-          .status(400)
-          .send({
-            message:
-              "Invalid institution ID.",
-          });
-      }
-
-      const institution =
-        await collections
-          .institutions
-          .findOne({
-            _id:
-              objectId,
-
-            status:
-              "active",
-          });
-
-      if (
-        !institution
-      ) {
-        return res
-          .status(404)
-          .send({
-            message:
-              "Institution not found.",
-          });
-      }
 
       res.send(
         institution

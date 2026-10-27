@@ -1,43 +1,34 @@
 import {
-  load,
-} from "cheerio";
-
-import {
   collections,
 } from "../config/db.js";
 
 import {
+  cleanString,
   escapeRegExp,
+  hasOwn,
 } from "../utils/helpers.js";
 
-const UGC_DIRECTORY_URL =
-  "https://www.ugc.gov.bd/universities";
+import {
+  toObjectId,
+} from "../utils/objectId.js";
 
-const FALLBACK_CATEGORY_URLS = [
-  "https://www.ugc.gov.bd/universities/public-universities",
-  "https://www.ugc.gov.bd/universities/private-universities",
-  "https://www.ugc.gov.bd/universities/international-universities",
-];
-
-const TYPE_ALIASES =
-  new Map([
-    [
-      "public-universities",
-      "public",
-    ],
-
-    [
-      "private-universities",
-      "private",
-    ],
-
-    [
-      "international-universities",
-      "international",
-    ],
+const INSTITUTION_TYPES =
+  new Set([
+    "public",
+    "private",
+    "international",
+    "other",
   ]);
 
-const slugify = (value) =>
+const INSTITUTION_STATUSES =
+  new Set([
+    "active",
+    "inactive",
+  ]);
+
+const slugify = (
+  value
+) =>
   String(value || "")
     .normalize("NFKC")
     .toLowerCase()
@@ -51,458 +42,204 @@ const slugify = (value) =>
     )
     .slice(0, 180);
 
-const cleanName = (value) =>
-  String(value || "")
-    .replace(
-      /নোটিশ/gi,
-      ""
-    )
-    .replace(
-      /\s+/g,
-      " "
-    )
-    .trim();
-
 const normalizeWebsite = (
   value
 ) => {
   const raw =
-    String(value || "")
-      .trim();
+    cleanString(
+      value,
+      300
+    );
 
-  if (
-    !raw ||
-    raw === "—" ||
-    raw === "-"
-  ) {
+  if (!raw) {
     return "";
   }
 
-  const first =
-    raw
-      .split(",")[0]
-      .trim();
-
   if (
     /^https?:\/\//i.test(
-      first
+      raw
     )
   ) {
-    return first;
+    return raw;
   }
 
-  return `https://${first.replace(
+  return `https://${raw.replace(
     /^\/+/,
     ""
   )}`;
 };
 
-const categoryTypeFromUrl = (
-  url
+const createHttpError = (
+  status,
+  message
 ) => {
-  const pathname =
-    new URL(url)
-      .pathname
-      .replace(
-        /\/+$/,
-        ""
-      );
-
-  const last =
-    pathname
-      .split("/")
-      .filter(Boolean)
-      .at(-1) || "";
-
-  if (
-    TYPE_ALIASES.has(
-      last
-    )
-  ) {
-    return TYPE_ALIASES.get(
-      last
+  const error =
+    new Error(
+      message
     );
-  }
 
-  if (
-    /cross|cbhe/i.test(
-      last
-    )
-  ) {
-    return "cbhe";
-  }
+  error.status =
+    status;
 
-  return "other";
+  return error;
 };
 
-const fetchHtml =
-  async (url) => {
-    const controller =
-      new AbortController();
+const normalizeInstitutionInput =
+  (
+    body = {},
+    {
+      partial = false,
+    } = {}
+  ) => {
+    const value = {};
 
-    const timeout =
-      setTimeout(
-        () =>
-          controller.abort(),
-        20000
-      );
-
-    try {
-      const response =
-        await fetch(
-          url,
-          {
-            headers: {
-              "user-agent":
-                "ReSellHub/1.0 institution-sync",
-
-              accept:
-                "text/html,application/xhtml+xml",
-            },
-
-            signal:
-              controller.signal,
-          }
+    if (
+      !partial ||
+      hasOwn(
+        body,
+        "name"
+      )
+    ) {
+      const name =
+        cleanString(
+          body.name,
+          180
         );
 
       if (
-        !response.ok
+        name.length < 3
       ) {
-        throw new Error(
-          `UGC request failed (${response.status}) for ${url}`
+        throw createHttpError(
+          400,
+          "Institution name must be at least 3 characters."
         );
       }
 
-      return await response.text();
-    } finally {
-      clearTimeout(
-        timeout
-      );
+      value.name =
+        name;
+
+      value.slug =
+        slugify(name);
     }
-  };
-
-const discoverCategoryUrls =
-  async () => {
-    const html =
-      await fetchHtml(
-        UGC_DIRECTORY_URL
-      );
-
-    const $ =
-      load(html);
-
-    const urls =
-      new Set();
-
-    $(
-      "a[href]"
-    ).each(
-      (
-        _,
-        element
-      ) => {
-        const href =
-          $(element).attr(
-            "href"
-          );
-
-        if (!href) {
-          return;
-        }
-
-        try {
-          const url =
-            new URL(
-              href,
-              UGC_DIRECTORY_URL
-            );
-
-          if (
-            url.hostname !==
-              "www.ugc.gov.bd" &&
-            url.hostname !==
-              "ugc.gov.bd"
-          ) {
-            return;
-          }
-
-          const pathname =
-            url.pathname.replace(
-              /\/+$/,
-              ""
-            );
-
-          if (
-            !pathname.startsWith(
-              "/universities/"
-            )
-          ) {
-            return;
-          }
-
-          urls.add(
-            `${url.origin}${pathname}`
-          );
-        } catch {
-          // Ignore bad source links
-        }
-      }
-    );
-
-    const result = [
-      ...urls,
-    ];
-
-    return result.length >= 3
-      ? result
-      : FALLBACK_CATEGORY_URLS;
-  };
-
-const parseInstitutionPage =
-  (
-    html,
-    sourceUrl
-  ) => {
-    const $ =
-      load(html);
-
-    const type =
-      categoryTypeFromUrl(
-        sourceUrl
-      );
-
-    const result = [];
-
-    $("table tr").each(
-      (_, row) => {
-        const cells =
-          $(row).find(
-            "td"
-          );
-
-        if (
-          cells.length < 2
-        ) {
-          return;
-        }
-
-        const name =
-          cleanName(
-            $(cells[1]).text()
-          );
-
-        if (
-          !name ||
-          !/বিশ্ববিদ্যালয়|university/i.test(
-            name
-          )
-        ) {
-          return;
-        }
-
-        const websiteCell =
-          cells.length >= 3
-            ? $(cells[2])
-            : null;
-
-        const websiteHref =
-          websiteCell
-            ?.find(
-              "a[href]"
-            )
-            .first()
-            .attr(
-              "href"
-            ) || "";
-
-        const websiteText =
-          websiteCell?.text() ||
-          "";
-
-        const slug =
-          slugify(name);
-
-        if (!slug) {
-          return;
-        }
-
-        result.push({
-          name,
-
-          slug,
-
-          type,
-
-          website:
-            normalizeWebsite(
-              websiteHref ||
-                websiteText
-            ),
-
-          source:
-            "ugc",
-
-          sourceUrl,
-
-          status:
-            "active",
-        });
-      }
-    );
-
-    return result;
-  };
-
-export const syncInstitutionsFromUGC =
-  async () => {
-    const categoryUrls =
-      await discoverCategoryUrls();
-
-    const batches = [];
-
-    for (
-      const url of
-      categoryUrls
-    ) {
-      const html =
-        await fetchHtml(
-          url
-        );
-
-      batches.push(
-        ...parseInstitutionPage(
-          html,
-          url
-        )
-      );
-    }
-
-    const deduped = [
-      ...new Map(
-        batches.map(
-          (item) => [
-            item.slug,
-            item,
-          ]
-        )
-      ).values(),
-    ];
-
-    /*
-      Safety protection:
-      if UGC page structure changes,
-      do not destroy old database.
-    */
 
     if (
-      deduped.length < 50
+      !partial ||
+      hasOwn(
+        body,
+        "shortName"
+      )
     ) {
-      throw new Error(
-        `UGC sync returned only ${deduped.length} institutions. Existing data was not changed.`
-      );
+      value.shortName =
+        cleanString(
+          body.shortName,
+          40
+        );
     }
 
-    const now =
-      new Date();
+    if (
+      !partial ||
+      hasOwn(
+        body,
+        "type"
+      )
+    ) {
+      const type =
+        cleanString(
+          body.type,
+          30
+        ).toLowerCase();
 
-    await collections
-      .institutions
-      .bulkWrite(
-        deduped.map(
-          (item) => ({
-            updateOne: {
-              filter: {
-                slug:
-                  item.slug,
-              },
+      if (
+        !INSTITUTION_TYPES.has(
+          type
+        )
+      ) {
+        throw createHttpError(
+          400,
+          "Institution type must be public, private, international, or other."
+        );
+      }
 
-              update: {
-                $set: {
-                  ...item,
+      value.type =
+        type;
+    }
 
-                  syncedAt:
-                    now,
+    if (
+      !partial ||
+      hasOwn(
+        body,
+        "website"
+      )
+    ) {
+      value.website =
+        normalizeWebsite(
+          body.website
+        );
+    }
 
-                  updatedAt:
-                    now,
-                },
+    for (
+      const field of [
+        "city",
+        "district",
+        "division",
+      ]
+    ) {
+      if (
+        !partial ||
+        hasOwn(
+          body,
+          field
+        )
+      ) {
+        value[field] =
+          cleanString(
+            body[field],
+            100
+          );
+      }
+    }
 
-                $setOnInsert: {
-                  createdAt:
-                    now,
-                },
-              },
+    if (
+      hasOwn(
+        body,
+        "status"
+      )
+    ) {
+      const status =
+        cleanString(
+          body.status,
+          20
+        ).toLowerCase();
 
-              upsert: true,
-            },
-          })
-        ),
-        {
-          ordered: false,
-        }
-      );
+      if (
+        !INSTITUTION_STATUSES.has(
+          status
+        )
+      ) {
+        throw createHttpError(
+          400,
+          "Institution status must be active or inactive."
+        );
+      }
 
-    await collections
-      .institutions
-      .updateMany(
-        {
-          source: "ugc",
+      value.status =
+        status;
+    } else if (
+      !partial
+    ) {
+      value.status =
+        "active";
+    }
 
-          slug: {
-            $nin:
-              deduped.map(
-                (item) =>
-                  item.slug
-              ),
-          },
-        },
-
-        {
-          $set: {
-            status:
-              "inactive",
-
-            updatedAt:
-              now,
-          },
-        }
-      );
-
-    const byType =
-      deduped.reduce(
-        (
-          acc,
-          item
-        ) => {
-          acc[item.type] =
-            (
-              acc[
-                item.type
-              ] || 0
-            ) + 1;
-
-          return acc;
-        },
-        {}
-      );
-
-    return {
-      total:
-        deduped.length,
-
-      byType,
-
-      categoryUrls,
-
-      syncedAt:
-        now,
-    };
+    return value;
   };
 
 export const listInstitutions =
   async ({
     search = "",
     type = "",
+    status = "active",
+    includeInactive = false,
     page = 1,
     limit = 100,
   } = {}) => {
@@ -520,7 +257,6 @@ export const listInstitutions =
         1,
         Math.min(
           300,
-
           Number.parseInt(
             String(limit),
             10
@@ -528,42 +264,119 @@ export const listInstitutions =
         )
       );
 
-    const query = {
-      status:
-        "active",
-    };
+    const query = {};
+
+    if (
+      !includeInactive
+    ) {
+      query.status =
+        "active";
+    } else if (
+      status
+    ) {
+      const safeStatus =
+        cleanString(
+          status,
+          20
+        ).toLowerCase();
+
+      if (
+        !INSTITUTION_STATUSES.has(
+          safeStatus
+        )
+      ) {
+        throw createHttpError(
+          400,
+          "Invalid institution status filter."
+        );
+      }
+
+      query.status =
+        safeStatus;
+    }
 
     if (type) {
+      const safeType =
+        cleanString(
+          type,
+          30
+        ).toLowerCase();
+
+      if (
+        !INSTITUTION_TYPES.has(
+          safeType
+        )
+      ) {
+        throw createHttpError(
+          400,
+          "Invalid institution type filter."
+        );
+      }
+
       query.type =
-        String(type).trim();
+        safeType;
     }
 
     if (search) {
       const safeSearch =
-        String(search)
-          .trim()
-          .slice(
-            0,
-            100
+        cleanString(
+          search,
+          100
+        );
+
+      if (
+        safeSearch
+      ) {
+        const regex =
+          escapeRegExp(
+            safeSearch
           );
 
-      if (safeSearch) {
-        query.name = {
-          $regex:
-            escapeRegExp(
-              safeSearch
-            ),
+        query.$or = [
+          {
+            name: {
+              $regex:
+                regex,
+              $options:
+                "i",
+            },
+          },
 
-          $options:
-            "i",
-        };
+          {
+            shortName: {
+              $regex:
+                regex,
+              $options:
+                "i",
+            },
+          },
+
+          {
+            city: {
+              $regex:
+                regex,
+              $options:
+                "i",
+            },
+          },
+
+          {
+            district: {
+              $regex:
+                regex,
+              $options:
+                "i",
+            },
+          },
+        ];
       }
     }
 
     const skip =
       (
         safePage - 1
-      ) * safeLimit;
+      ) *
+      safeLimit;
 
     const [
       institutions,
@@ -576,7 +389,9 @@ export const listInstitutions =
           .sort({
             name: 1,
           })
-          .skip(skip)
+          .skip(
+            skip
+          )
           .limit(
             safeLimit
           )
@@ -591,11 +406,13 @@ export const listInstitutions =
 
     return {
       institutions,
-
       total,
 
       page:
         safePage,
+
+      limit:
+        safeLimit,
 
       totalPages:
         Math.max(
@@ -605,5 +422,374 @@ export const listInstitutions =
               safeLimit
           )
         ),
+    };
+  };
+
+export const getInstitutionById =
+  async (
+    id,
+    {
+      includeInactive = false,
+    } = {}
+  ) => {
+    const objectId =
+      toObjectId(id);
+
+    if (!objectId) {
+      throw createHttpError(
+        400,
+        "Invalid institution ID."
+      );
+    }
+
+    const query = {
+      _id:
+        objectId,
+    };
+
+    if (
+      !includeInactive
+    ) {
+      query.status =
+        "active";
+    }
+
+    const institution =
+      await collections
+        .institutions
+        .findOne(
+          query
+        );
+
+    if (
+      !institution
+    ) {
+      throw createHttpError(
+        404,
+        "Institution not found."
+      );
+    }
+
+    return institution;
+  };
+
+export const createInstitution =
+  async (
+    body = {}
+  ) => {
+    const value =
+      normalizeInstitutionInput(
+        body
+      );
+
+    const now =
+      new Date();
+
+    const document = {
+      ...value,
+
+      source:
+        "resellhub",
+
+      createdAt:
+        now,
+
+      updatedAt:
+        now,
+    };
+
+    const result =
+      await collections
+        .institutions
+        .insertOne(
+          document
+        );
+
+    return {
+      ...document,
+
+      _id:
+        result.insertedId,
+    };
+  };
+
+export const updateInstitution =
+  async (
+    id,
+    body = {}
+  ) => {
+    const objectId =
+      toObjectId(id);
+
+    if (!objectId) {
+      throw createHttpError(
+        400,
+        "Invalid institution ID."
+      );
+    }
+
+    const current =
+      await collections
+        .institutions
+        .findOne({
+          _id:
+            objectId,
+        });
+
+    if (!current) {
+      throw createHttpError(
+        404,
+        "Institution not found."
+      );
+    }
+
+    const update =
+      normalizeInstitutionInput(
+        body,
+        {
+          partial: true,
+        }
+      );
+
+    if (
+      !Object.keys(
+        update
+      ).length
+    ) {
+      throw createHttpError(
+        400,
+        "No valid institution fields were provided."
+      );
+    }
+
+    update.updatedAt =
+      new Date();
+
+    await collections
+      .institutions
+      .updateOne(
+        {
+          _id:
+            objectId,
+        },
+        {
+          $set:
+            update,
+        }
+      );
+
+    /*
+     * If institution name changes,
+     * update snapshots.
+     */
+
+    if (
+      update.name &&
+      update.name !==
+        current.name
+    ) {
+      const now =
+        new Date();
+
+      await Promise.all([
+        collections
+          .campuses
+          .updateMany(
+            {
+              institutionId:
+                objectId,
+            },
+            {
+              $set: {
+                institutionName:
+                  update.name,
+
+                updatedAt:
+                  now,
+              },
+            }
+          ),
+
+        collections
+          .products
+          .updateMany(
+            {
+              "studentZone.institutionId":
+                objectId,
+            },
+            {
+              $set: {
+                "studentZone.institutionName":
+                  update.name,
+
+                updatedAt:
+                  now,
+              },
+            }
+          ),
+      ]);
+    }
+
+    /*
+     * Archiving institution
+     * also archives campuses.
+     */
+
+    if (
+      update.status ===
+      "inactive"
+    ) {
+      await collections
+        .campuses
+        .updateMany(
+          {
+            institutionId:
+              objectId,
+          },
+          {
+            $set: {
+              status:
+                "inactive",
+
+              updatedAt:
+                new Date(),
+            },
+          }
+        );
+    }
+
+    return collections
+      .institutions
+      .findOne({
+        _id:
+          objectId,
+      });
+  };
+
+export const archiveInstitution =
+  async (id) =>
+    updateInstitution(
+      id,
+      {
+        status:
+          "inactive",
+      }
+    );
+
+export const importInstitutions =
+  async (
+    items = []
+  ) => {
+    if (
+      !Array.isArray(
+        items
+      ) ||
+      items.length === 0 ||
+      items.length > 1000
+    ) {
+      throw createHttpError(
+        400,
+        "institutions must be a non-empty array with at most 1000 items."
+      );
+    }
+
+    const normalized = [];
+    const rejected = [];
+
+    for (
+      let index = 0;
+      index <
+      items.length;
+      index += 1
+    ) {
+      try {
+        normalized.push(
+          normalizeInstitutionInput(
+            items[index]
+          )
+        );
+      } catch (error) {
+        rejected.push({
+          index,
+          message:
+            error.message,
+        });
+      }
+    }
+
+    if (
+      !normalized.length
+    ) {
+      throw createHttpError(
+        400,
+        "No valid institution records were provided."
+      );
+    }
+
+    const now =
+      new Date();
+
+    const result =
+      await collections
+        .institutions
+        .bulkWrite(
+          normalized.map(
+            (item) => ({
+              updateOne: {
+                filter: {
+                  slug:
+                    item.slug,
+                },
+
+                update: {
+                  $set: {
+                    ...item,
+
+                    source:
+                      "resellhub",
+
+                    updatedAt:
+                      now,
+                  },
+
+                  $setOnInsert:
+                    {
+                      createdAt:
+                        now,
+                    },
+                },
+
+                upsert:
+                  true,
+              },
+            })
+          ),
+
+          {
+            ordered:
+              false,
+          }
+        );
+
+    return {
+      received:
+        items.length,
+
+      accepted:
+        normalized.length,
+
+      rejected,
+
+      upserted:
+        result
+          .upsertedCount,
+
+      modified:
+        result
+          .modifiedCount,
+
+      matched:
+        result
+          .matchedCount,
     };
   };

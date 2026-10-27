@@ -3,12 +3,20 @@ import {
 } from "../config/db.js";
 
 import {
+  cleanString,
   escapeRegExp,
+  hasOwn,
 } from "../utils/helpers.js";
 
 import {
   toObjectId,
 } from "../utils/objectId.js";
+
+const CAMPUS_STATUSES =
+  new Set([
+    "active",
+    "inactive",
+  ]);
 
 const slugify = (
   value
@@ -26,31 +34,279 @@ const slugify = (
     )
     .slice(0, 180);
 
-const clean = (
-  value,
-  max = 200
-) =>
-  typeof value ===
-  "string"
-    ? value
-        .trim()
-        .slice(
-          0,
-          max
+const createHttpError = (
+  status,
+  message
+) => {
+  const error =
+    new Error(
+      message
+    );
+
+  error.status =
+    status;
+
+  return error;
+};
+
+const resolveInstitution =
+  async (
+    institutionId
+  ) => {
+    const objectId =
+      toObjectId(
+        institutionId
+      );
+
+    if (!objectId) {
+      throw createHttpError(
+        400,
+        "Invalid institution ID."
+      );
+    }
+
+    const institution =
+      await collections
+        .institutions
+        .findOne({
+          _id:
+            objectId,
+
+          status:
+            "active",
+        });
+
+    if (
+      !institution
+    ) {
+      throw createHttpError(
+        400,
+        "Selected institution is not available."
+      );
+    }
+
+    return institution;
+  };
+
+const normalizeCampusInput =
+  async (
+    body = {},
+    {
+      partial = false,
+    } = {}
+  ) => {
+    const value = {};
+
+    if (!partial) {
+      const institution =
+        await resolveInstitution(
+          body.institutionId
+        );
+
+      value.institutionId =
+        institution._id;
+
+      value.institutionName =
+        institution.name;
+    }
+
+    if (
+      !partial ||
+      hasOwn(
+        body,
+        "name"
+      )
+    ) {
+      const name =
+        cleanString(
+          body.name,
+          180
+        );
+
+      if (
+        name.length < 2
+      ) {
+        throw createHttpError(
+          400,
+          "Campus name must be at least 2 characters."
+        );
+      }
+
+      value.name =
+        name;
+
+      value.slug =
+        slugify(
+          name
+        );
+    }
+
+    const fields = [
+      [
+        "address",
+        300,
+      ],
+
+      [
+        "city",
+        100,
+      ],
+
+      [
+        "district",
+        100,
+      ],
+
+      [
+        "division",
+        100,
+      ],
+    ];
+
+    for (
+      const [
+        field,
+        max,
+      ] of fields
+    ) {
+      if (
+        !partial ||
+        hasOwn(
+          body,
+          field
         )
-    : "";
+      ) {
+        value[field] =
+          cleanString(
+            body[field],
+            max
+          );
+      }
+    }
+
+    if (
+      !partial ||
+      hasOwn(
+        body,
+        "isMain"
+      )
+    ) {
+      value.isMain =
+        body.isMain ===
+          true ||
+        body.isMain ===
+          "true";
+    }
+
+    if (
+      hasOwn(
+        body,
+        "status"
+      )
+    ) {
+      const status =
+        cleanString(
+          body.status,
+          20
+        ).toLowerCase();
+
+      if (
+        !CAMPUS_STATUSES.has(
+          status
+        )
+      ) {
+        throw createHttpError(
+          400,
+          "Campus status must be active or inactive."
+        );
+      }
+
+      value.status =
+        status;
+    } else if (
+      !partial
+    ) {
+      value.status =
+        "active";
+    }
+
+    return value;
+  };
+
+const ensureSingleMainCampus =
+  async (
+    institutionId,
+    exceptId = null
+  ) => {
+    const query = {
+      institutionId,
+
+      isMain:
+        true,
+    };
+
+    if (exceptId) {
+      query._id = {
+        $ne:
+          exceptId,
+      };
+    }
+
+    await collections
+      .campuses
+      .updateMany(
+        query,
+        {
+          $set: {
+            isMain:
+              false,
+
+            updatedAt:
+              new Date(),
+          },
+        }
+      );
+  };
 
 export const listCampuses =
   async ({
     institutionId = "",
     search = "",
+    status = "active",
+    includeInactive = false,
     page = 1,
     limit = 100,
   } = {}) => {
-    const query = {
-      status:
-        "active",
-    };
+    const query = {};
+
+    if (
+      !includeInactive
+    ) {
+      query.status =
+        "active";
+    } else if (
+      status
+    ) {
+      const safeStatus =
+        cleanString(
+          status,
+          20
+        ).toLowerCase();
+
+      if (
+        !CAMPUS_STATUSES.has(
+          safeStatus
+        )
+      ) {
+        throw createHttpError(
+          400,
+          "Invalid campus status filter."
+        );
+      }
+
+      query.status =
+        safeStatus;
+    }
 
     if (
       institutionId
@@ -61,15 +317,10 @@ export const listCampuses =
         );
 
       if (!objectId) {
-        const error =
-          new Error(
-            "Invalid institution ID."
-          );
-
-        error.status =
-          400;
-
-        throw error;
+        throw createHttpError(
+          400,
+          "Invalid institution ID."
+        );
       }
 
       query.institutionId =
@@ -78,20 +329,33 @@ export const listCampuses =
 
     if (search) {
       const safeSearch =
-        clean(
+        cleanString(
           search,
           100
         );
 
-      if (safeSearch) {
+      if (
+        safeSearch
+      ) {
+        const regex =
+          escapeRegExp(
+            safeSearch
+          );
+
         query.$or = [
           {
             name: {
               $regex:
-                escapeRegExp(
-                  safeSearch
-                ),
+                regex,
+              $options:
+                "i",
+            },
+          },
 
+          {
+            institutionName: {
+              $regex:
+                regex,
               $options:
                 "i",
             },
@@ -100,10 +364,7 @@ export const listCampuses =
           {
             city: {
               $regex:
-                escapeRegExp(
-                  safeSearch
-                ),
-
+                regex,
               $options:
                 "i",
             },
@@ -112,10 +373,7 @@ export const listCampuses =
           {
             district: {
               $regex:
-                escapeRegExp(
-                  safeSearch
-                ),
-
+                regex,
               $options:
                 "i",
             },
@@ -138,7 +396,6 @@ export const listCampuses =
         1,
         Math.min(
           300,
-
           Number.parseInt(
             String(limit),
             10
@@ -149,7 +406,8 @@ export const listCampuses =
     const skip =
       (
         safePage - 1
-      ) * safeLimit;
+      ) *
+      safeLimit;
 
     const [
       campuses,
@@ -160,10 +418,18 @@ export const listCampuses =
           .campuses
           .find(query)
           .sort({
-            isMain: -1,
-            name: 1,
+            institutionName:
+              1,
+
+            isMain:
+              -1,
+
+            name:
+              1,
           })
-          .skip(skip)
+          .skip(
+            skip
+          )
           .limit(
             safeLimit
           )
@@ -183,10 +449,12 @@ export const listCampuses =
       page:
         safePage,
 
+      limit:
+        safeLimit,
+
       totalPages:
         Math.max(
           1,
-
           Math.ceil(
             total /
               safeLimit
@@ -194,6 +462,232 @@ export const listCampuses =
         ),
     };
   };
+
+export const getCampusById =
+  async (
+    id,
+    {
+      includeInactive = false,
+    } = {}
+  ) => {
+    const objectId =
+      toObjectId(id);
+
+    if (!objectId) {
+      throw createHttpError(
+        400,
+        "Invalid campus ID."
+      );
+    }
+
+    const query = {
+      _id:
+        objectId,
+    };
+
+    if (
+      !includeInactive
+    ) {
+      query.status =
+        "active";
+    }
+
+    const campus =
+      await collections
+        .campuses
+        .findOne(
+          query
+        );
+
+    if (!campus) {
+      throw createHttpError(
+        404,
+        "Campus not found."
+      );
+    }
+
+    return campus;
+  };
+
+export const createCampus =
+  async (
+    body = {}
+  ) => {
+    const value =
+      await normalizeCampusInput(
+        body
+      );
+
+    const now =
+      new Date();
+
+    const document = {
+      ...value,
+
+      source:
+        "resellhub",
+
+      createdAt:
+        now,
+
+      updatedAt:
+        now,
+    };
+
+    if (
+      document.isMain
+    ) {
+      await ensureSingleMainCampus(
+        document
+          .institutionId
+      );
+    }
+
+    const result =
+      await collections
+        .campuses
+        .insertOne(
+          document
+        );
+
+    return {
+      ...document,
+
+      _id:
+        result.insertedId,
+    };
+  };
+
+export const updateCampus =
+  async (
+    id,
+    body = {}
+  ) => {
+    const objectId =
+      toObjectId(id);
+
+    if (!objectId) {
+      throw createHttpError(
+        400,
+        "Invalid campus ID."
+      );
+    }
+
+    const current =
+      await collections
+        .campuses
+        .findOne({
+          _id:
+            objectId,
+        });
+
+    if (!current) {
+      throw createHttpError(
+        404,
+        "Campus not found."
+      );
+    }
+
+    if (
+      hasOwn(
+        body,
+        "institutionId"
+      )
+    ) {
+      throw createHttpError(
+        400,
+        "A campus cannot be moved to another institution."
+      );
+    }
+
+    const update =
+      await normalizeCampusInput(
+        body,
+        {
+          partial:
+            true,
+        }
+      );
+
+    if (
+      !Object.keys(
+        update
+      ).length
+    ) {
+      throw createHttpError(
+        400,
+        "No valid campus fields were provided."
+      );
+    }
+
+    update.updatedAt =
+      new Date();
+
+    if (
+      update.isMain ===
+      true
+    ) {
+      await ensureSingleMainCampus(
+        current
+          .institutionId,
+        objectId
+      );
+    }
+
+    await collections
+      .campuses
+      .updateOne(
+        {
+          _id:
+            objectId,
+        },
+        {
+          $set:
+            update,
+        }
+      );
+
+    if (
+      update.name &&
+      update.name !==
+        current.name
+    ) {
+      await collections
+        .products
+        .updateMany(
+          {
+            "studentZone.campusId":
+              objectId,
+          },
+          {
+            $set: {
+              "studentZone.campusName":
+                update.name,
+
+              updatedAt:
+                new Date(),
+            },
+          }
+        );
+    }
+
+    return collections
+      .campuses
+      .findOne({
+        _id:
+          objectId,
+      });
+  };
+
+export const archiveCampus =
+  async (id) =>
+    updateCampus(
+      id,
+      {
+        status:
+          "inactive",
+      }
+    );
 
 export const importCampuses =
   async (
@@ -206,123 +700,44 @@ export const importCampuses =
       items.length === 0 ||
       items.length > 1000
     ) {
-      const error =
-        new Error(
-          "campuses must be a non-empty array with at most 1000 items."
-        );
-
-      error.status =
-        400;
-
-      throw error;
+      throw createHttpError(
+        400,
+        "campuses must be a non-empty array with at most 1000 items."
+      );
     }
 
-    const normalized =
-      [];
+    const normalized = [];
+    const rejected = [];
 
     for (
-      const item of
-      items
+      let index = 0;
+      index <
+      items.length;
+      index += 1
     ) {
-      const institutionId =
-        toObjectId(
-          item
-            ?.institutionId
+      try {
+        normalized.push(
+          await normalizeCampusInput(
+            items[index]
+          )
         );
+      } catch (error) {
+        rejected.push({
+          index,
 
-      const name =
-        clean(
-          item?.name,
-          180
-        );
-
-      if (
-        !institutionId ||
-        name.length < 2
-      ) {
-        continue;
+          message:
+            error.message,
+        });
       }
-
-      const institution =
-        await collections
-          .institutions
-          .findOne({
-            _id:
-              institutionId,
-
-            status:
-              "active",
-          });
-
-      if (
-        !institution
-      ) {
-        continue;
-      }
-
-      normalized.push({
-        institutionId,
-
-        institutionName:
-          institution.name,
-
-        name,
-
-        slug:
-          slugify(name),
-
-        address:
-          clean(
-            item?.address,
-            300
-          ),
-
-        city:
-          clean(
-            item?.city,
-            100
-          ),
-
-        district:
-          clean(
-            item?.district,
-            100
-          ),
-
-        division:
-          clean(
-            item?.division,
-            100
-          ),
-
-        isMain:
-          item?.isMain ===
-          true,
-
-        status:
-          "active",
-
-        source:
-          clean(
-            item?.source,
-            40
-          ) ||
-          "admin",
-      });
     }
 
     if (
       !normalized.length
     ) {
-      const error =
-        new Error(
-          "No valid campus records were provided."
-        );
-
-      error.status =
-        400;
-
-      throw error;
+      throw createHttpError(
+        400,
+        "No valid campus records were provided."
+      );
     }
 
     const now =
@@ -346,6 +761,9 @@ export const importCampuses =
                 update: {
                   $set: {
                     ...item,
+
+                    source:
+                      "resellhub",
 
                     updatedAt:
                       now,
@@ -377,6 +795,8 @@ export const importCampuses =
       accepted:
         normalized.length,
 
+      rejected,
+
       upserted:
         result
           .upsertedCount,
@@ -384,5 +804,9 @@ export const importCampuses =
       modified:
         result
           .modifiedCount,
+
+      matched:
+        result
+          .matchedCount,
     };
   };
